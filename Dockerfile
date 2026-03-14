@@ -1,11 +1,11 @@
 # Combined Dockerfile: frontend + backend in one (for Render single Web Service)
 # Build frontend, then run backend (which serves API + static frontend)
 
-# ---- Frontend build ----
-FROM node:20-alpine AS frontend-build
+# ---- Frontend build (use Debian-based Node so Rollup native deps work on Linux) ----
+FROM node:20-bookworm-slim AS frontend-build
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm ci --omit=optional 2>/dev/null || npm install
+RUN npm install
 COPY frontend/ .
 # Same-origin: backend will serve both API and static files, so use relative /api
 ENV VITE_API_URL=
