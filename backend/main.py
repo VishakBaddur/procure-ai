@@ -125,9 +125,12 @@ class CreateProjectRequest(BaseModel):
     primary_focus: List[str]  # ["pricing", "service", "warranty", "seller_rating"]
 
 
-@app.get("/")
-async def root():
-    return {"message": "Procurement AI Platform API v2.0"}
+# Root route only when not serving frontend (so combined deploy serves the app at /)
+_frontend_dist = Path(__file__).parent / "frontend_dist"
+if not _frontend_dist.exists():
+    @app.get("/")
+    async def root():
+        return {"message": "Procurement AI Platform API v2.0"}
 
 
 @app.post("/api/projects")
@@ -1285,7 +1288,6 @@ async def process_email_quote(project_id: str, email_data: Dict[str, Any]):
 
 
 # Serve frontend static files when running combined (e.g. Docker); frontend_dist is populated by root Dockerfile
-_frontend_dist = Path(__file__).parent / "frontend_dist"
 if _frontend_dist.exists():
     app.mount("/", StaticFiles(directory=str(_frontend_dist), html=True), name="frontend")
 
