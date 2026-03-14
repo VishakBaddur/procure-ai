@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+*.db
+*.sqlite
+*.sqlite3
+
+# Node
+node_modules/
+dist/
+build/
+.vite/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads
+uploads/
+*.pdf
+*.doc
+*.docx
+*.jpg
+*.jpeg
+*.png
+
+# Environment
+.env
+.env.local
+
+# Database
+procurement.db
+

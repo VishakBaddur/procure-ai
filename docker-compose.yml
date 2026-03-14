@@ -1,0 +1,29 @@
+# Procurement AI — local run with Docker
+# Backend: port 8000, Frontend: port 3000 (built app calls backend at http://localhost:8000)
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      # Optional: add .env or set below
+      # - GROQ_API_KEY=
+      # - SERPAPI_KEY=
+      # - DB_TYPE=sqlite
+    # Optional: persist SQLite DB (create a volume and mount to a path if your app supports SQLITE_PATH)
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Backend URL as seen by the browser (host machine)
+        VITE_API_URL: http://localhost:8000
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
