@@ -237,22 +237,14 @@ class PriceComparisonAgent:
         return text
     
     async def _parse_pricing(self, text: str, vendor_name: str) -> Dict[str, Any]:
-        """Parse pricing information from extracted text using AI for better accuracy"""
-        
-        # For email-style / informal quotes: use dedicated LLM prompt or regex fallback (any product type)
-        if self._is_email_style_quote(text):
-            result = await self._extract_email_style_and_build_result(text, vendor_name)
-            if result is not None:
-                return result
-        
-        # Try AI parsing first if available
+        """Parse pricing: use Groq/Ollama as the single parser when available (understands any format); regex only when no LLM."""
         if self.use_ai:
             try:
                 return await self._parse_with_ai(text, vendor_name)
             except Exception as e:
-                print(f"AI parsing failed, falling back to regex: {e}")
-        
-        # Fallback to regex-based parsing
+                import sys
+                print(f"[Price Agent] LLM parsing failed, falling back to regex: {e}", file=sys.stderr, flush=True)
+        # No LLM (Groq/Ollama) available, or LLM failed: use regex fallback
         return self._parse_with_regex(text, vendor_name)
     
     async def _parse_with_ai(self, text: str, vendor_name: str) -> Dict[str, Any]:
@@ -382,6 +374,14 @@ class PriceComparisonAgent:
           * With pricing_matrix containing the tier "1–3 kg: USD 69,000"
         - DO NOT create separate products for each pricing tier
         - Pricing tiers go in the pricing_matrix array, NOT as separate products
+        
+        CRITICAL: ONLY EXTRACT ACTUAL PRODUCT/SERVICE LINE ITEMS — NEVER THESE:
+        - Section headers (e.g. "Section 3", "Additional Charges", "Note A")
+        - Totals or summary rows: "Subtotal", "Total", "Freight", "Tax", "Discount", "Balance Due", "Merchandise Subtotal", "Estimated Total"
+        - Contact/labels: "Cell", "Phone", "Fax", "Email" (these are contact labels, not products)
+        - Document structure: "Payment:", "Delivery:", "Certification:" when the line is a label only
+        - PDF artifacts: anything containing "(cid" or placeholder text
+        - A line is a product ONLY if it describes something being sold with a price (item + unit price or line total)
         
         Return a JSON object with this exact structure:
         {{
@@ -1474,407 +1474,94 @@ Return ONLY valid JSON. No markdown, no code blocks, no explanatory text. Just t
         
         return products
     
-    def _is_email_style_quote(self, text: str) -> bool:
-        """Detect if the quote is email-style / conversational (so we avoid parsing sentences as line items)."""
-        if not text or len(text) < 50:
-            return False
-        text_lower = text.lower()
-        markers = [
-            "good talking", "hey there", "let me know", "if we lock", "thanks,", "best,",
-            "per your request", "following up", "ballpark", "rough numbers", "like i said",
-            "call or email", "walk you through", "get you going", "we can do", "we'd probably",
-            "re: ", "subject:", "from:", "to:", "sent from my", "cheers,", "regards,",
-        ]
-        return sum(1 for m in markers if m in text_lower) >= 2
-    
-    async def _extract_email_style_and_build_result(self, text: str, vendor_name: str) -> Dict[str, Any] | None:
-        """For email-style quotes: extract products via LLM or regex, then build full result dict. Returns None if nothing extracted."""
-        products = await self._extract_email_style_products(text, "USD")
-        if not products:
-            return None
-        return self._build_result_from_email_products(products, text, vendor_name)
-    
-    async def _extract_email_style_products(self, text: str, currency: str) -> List[Dict[str, Any]]:
-        """Extract product line items from email-style quote: try LLM first, then generic regex fallback."""
-        import sys
-        try:
-            raw_items = await self._extract_email_style_via_llm(text, currency)
-            if raw_items:
-                print("[Price Agent] Email-style quote: using LLM extraction path.", file=sys.stderr, flush=True)
-                return self._email_raw_items_to_products(raw_items, currency)
-        except Exception as e:
-            print(f"[Price Agent] Email-style LLM extraction failed: {e}", file=sys.stderr, flush=True)
-        print("[Price Agent] Email-style quote: using regex fallback (LLM unavailable or returned no items).", file=sys.stderr, flush=True)
-        return self._extract_email_style_regex_fallback(text, currency)
-    
-    async def _extract_email_style_via_llm(self, text: str, currency: str) -> List[Dict[str, Any]]:
-        """Send email text to LLM with prompt to extract only product line items; return list of {product_name, unit_price, quantity, total_price}."""
-        prompt = (
-            "This is an informal email quote. Extract only actual product line items with prices. "
-            "Ignore conversational text, greetings, timing comments, and payment discussion. "
-            "Return a JSON object with a single key 'items' whose value is an array of objects, "
-            "each with: product_name, unit_price (number), quantity (number), total_price (number). "
-            "Only include items that are clearly products being sold with a price attached.\n\n"
-            "Quote text:\n" + text[:12000]
-        )
-        out: List[Dict[str, Any]] = []
-        try:
-            if self.use_local_llm:
-                response = requests.post(
-                    f"{self.ollama_url}/api/generate",
-                    json={
-                        "model": self.ollama_model,
-                        "prompt": prompt,
-                        "stream": False,
-                        "options": {"temperature": 0.1, "num_predict": 2000},
-                    },
-                    timeout=90,
-                )
-                if response.status_code != 200:
-                    return []
-                response_text = response.json().get("response", "")
-            elif self.use_ai and getattr(self, "client", None):
-                response = self.client.chat.completions.create(
-                    model="llama-3.1-70b-versatile",
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.1,
-                )
-                response_text = response.choices[0].message.content or ""
-            else:
-                import sys
-                print("[Price Agent] Email-style LLM skipped: neither Ollama nor Groq available.", file=sys.stderr, flush=True)
-                return []
-            # Parse JSON: expect {"items": [...]} or bare array [...]
-            json_str = self._extract_json_from_response(response_text)
-            if not json_str.strip():
-                # Try bare array
-                start = response_text.find("[")
-                if start >= 0:
-                    end = response_text.rfind("]") + 1
-                    if end > start:
-                        json_str = response_text[start:end]
-            if not json_str.strip():
-                return []
-            data = json.loads(json_str)
-            items = data.get("items", data) if isinstance(data, dict) else (data if isinstance(data, list) else None)
-            if isinstance(items, list) and items:
-                for o in items:
-                    if isinstance(o, dict) and o.get("product_name") and (o.get("unit_price") is not None or o.get("total_price") is not None):
-                        out.append({
-                            "product_name": str(o.get("product_name", "")).strip(),
-                            "unit_price": float(o.get("unit_price") or 0),
-                            "quantity": int(float(o.get("quantity") or 1)),
-                            "total_price": float(o.get("total_price") or 0),
-                        })
-            return out
-        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
-            import sys
-            print(f"[Price Agent] Email-style LLM parse error: {e}", file=sys.stderr, flush=True)
-            return []
-    
-    def _email_raw_items_to_products(self, raw_items: List[Dict[str, Any]], currency: str) -> List[Dict[str, Any]]:
-        """Convert LLM raw items (product_name, unit_price, quantity, total_price) to internal product format."""
-        products = []
-        for i, r in enumerate(raw_items):
-            name = self._clean_email_product_name((r.get("product_name") or "").strip())
-            if not name or len(name) > 200:
-                continue
-            unit_price = float(r.get("unit_price") or 0)
-            quantity = int(float(r.get("quantity") or 1))
-            total_price = float(r.get("total_price") or 0)
-            if total_price <= 0 and unit_price > 0:
-                total_price = round(unit_price * quantity, 2)
-            if unit_price <= 0 and total_price > 0 and quantity > 0:
-                unit_price = round(total_price / quantity, 2)
-            if unit_price <= 0 and total_price <= 0:
-                continue
-            curr = (currency or "USD").upper()
-            products.append({
-                "product_id": f"product_{i + 1}",
-                "name": name,
-                "description": "Extracted from email-style quote",
-                "category": "Not specified",
-                "pricing_matrix": [{
-                    "quantity_min": quantity,
-                    "quantity_max": quantity,
-                    "quantity_unit": "unit",
-                    "payment_terms": "Not specified",
-                    "unit_price": unit_price,
-                    "total_price": total_price,
-                    "currency": curr,
-                    "notes": "Email quote",
-                }],
-                "default_payment_term": "Not specified",
-                "warranty": "Not specified",
-                "delivery_time": "Not specified",
-            })
-        return products
-    
-    def _clean_email_product_name(self, name: str) -> str:
-        """Strip pricing/quantity text from product name (e.g. 'per unit x 20 Monitor stands' -> 'Monitor stands')."""
-        import re
-        if not name or not name.strip():
-            return name
-        s = name.strip()
-        # Remove leading fragments: "per unit x 20 ", "each x 40 ", "$45 ", "around ", "about "
-        s = re.sub(r'^(?:per\s+unit|each)\s*x\s*~?\s*\d+\s*', '', s, flags=re.IGNORECASE)
-        s = re.sub(r'^\$?\s*\d+(?:\.\d{2})?\s*(?:each|/unit|per\s*unit)?\s*x\s*~?\s*\d+\s*', '', s, flags=re.IGNORECASE)
-        s = re.sub(r'^(?:around|about|~|approx\.?)\s*\$?\s*\d+(?:\.\d{2})?\s*', '', s, flags=re.IGNORECASE)
-        # Remove trailing fragments: " per unit x 20", " $45 each", " x 40"
-        s = re.sub(r'\s*(?:per\s+unit|each)\s*x\s*~?\s*\d+\s*$', '', s, flags=re.IGNORECASE)
-        s = re.sub(r'\s*\$?\s*\d+(?:\.\d{2})?\s*(?:each|/unit|per\s*unit)?\s*x\s*~?\s*\d+\s*$', '', s, flags=re.IGNORECASE)
-        s = re.sub(r'\s*x\s*~?\s*\d+\s*$', '', s, flags=re.IGNORECASE)
-        s = re.sub(r'\s+\d+(?:\.\d{2})?\s*(?:each|/unit|per\s*unit)\s*$', '', s, flags=re.IGNORECASE)
-        return re.sub(r'\s+', ' ', s).strip()
-
-    def _extract_email_style_regex_fallback(self, text: str, currency: str) -> List[Dict[str, Any]]:
-        """Generic regex fallback: find [product description] + [price]. Extract ALL matching lines. Works for any product type."""
-        import re
-        products = []
-        curr = (currency or "USD").upper()
-        default_qty = 1
-        qty_match = re.search(r'(?:for your |x\s*~?|quantity\s*:?\s*)(\d{2,6})\s*(?:folks?|units?|person|each|pieces?)?', text.lower())
-        if qty_match:
-            default_qty = int(qty_match.group(1))
-        # One unified pattern: optional leading bullet, product name (no newlines), : or -, optional around/about, price, optional each/per unit, optional x N
-        # Use [^\n]+? so we only match within one line (avoids capturing "per unit x 20\nMonitor stands" as name)
-        pattern = re.compile(
-            r'(?:^|[\n\r])'
-            r'(?:[-*•]\s*)?'
-            r'([^\n\r:]+?)'
-            r'[:\-]\s*'
-            r'(?:around|about|~|approx\.?)?\s*'
-            r'\$?\s*(\d+(?:\.\d{2})?)'
-            r'\s*(?:each|/unit|per\s*unit)?'
-            r'(?:\s*x\s*~?\s*(\d{2,6}))?',
-            re.IGNORECASE | re.MULTILINE
-        )
-        for m in pattern.finditer(text):
-            name = self._clean_email_product_name(m.group(1).strip())
-            name = re.sub(r'\s+', ' ', name).strip()
-            if len(name) < 2 or len(name) > 150:
-                continue
-            if any(x in name.lower() for x in ["thanks", "best,", "let me", "if we", "good talking", "call or", "hey there"]) or name.lower().strip() == "cell":
-                continue
-            unit_price = float(m.group(2))
-            qty = int(m.group(3)) if m.group(3) else default_qty
-            total = round(unit_price * qty, 2)
-            if any(p.get("name", "").lower() == name.lower() for p in products):
-                continue
-            products.append({
-                "product_id": f"product_{len(products) + 1}",
-                "name": name,
-                "description": "Extracted from email-style quote",
-                "category": "Not specified",
-                "pricing_matrix": [{
-                    "quantity_min": qty,
-                    "quantity_max": qty,
-                    "quantity_unit": "unit",
-                    "payment_terms": "Not specified",
-                    "unit_price": unit_price,
-                    "total_price": total,
-                    "currency": curr,
-                    "notes": "Extracted from email quote",
-                }],
-                "default_payment_term": "Not specified",
-                "warranty": "Not specified",
-                "delivery_time": "Not specified",
-            })
-        return products
-    
-    def _build_result_from_email_products(self, products: List[Dict[str, Any]], text: str, vendor_name: str) -> Dict[str, Any]:
-        """Build the same result structure as _process_ai_response from email-style product list."""
-        import sys
-        items = []
-        total_price = 0.0
-        currency = "USD"
-        for product in products:
-            name = product.get("name", "Unknown Product")
-            pricing_matrix = product.get("pricing_matrix", [])
-            if not pricing_matrix:
-                items.append({"name": name, "price": 0.0, "quantity": 1.0, "unit_price": 0.0, "unit": "unit", "product_id": product.get("product_id"), "description": product.get("description", ""), "payment_terms": "Not specified"})
-                continue
-            entry = pricing_matrix[0]
-            qty = int(entry.get("quantity_min") or entry.get("quantity_max") or 1)
-            unit_price = float(entry.get("unit_price") or 0)
-            total_item = float(entry.get("total_price") or unit_price * qty)
-            total_price += total_item
-            if entry.get("currency"):
-                currency = entry["currency"]
-            items.append({
-                "name": name,
-                "price": total_item,
-                "quantity": float(qty),
-                "unit_price": unit_price,
-                "unit": entry.get("quantity_unit", "unit"),
-                "product_id": product.get("product_id"),
-                "description": product.get("description", ""),
-                "payment_terms": entry.get("payment_terms", "Not specified"),
-            })
-        for p in products:
-            if "warranty" not in p or not p.get("warranty"):
-                p["warranty"] = "Not specified"
-            if "pricing_matrix" not in p:
-                p["pricing_matrix"] = []
-        summary = {"currency": currency, "total_products": len(products)}
-        return {
-            "vendor_name": vendor_name,
-            "items": items,
-            "products": products,
-            "total_price": float(total_price),
-            "currency": currency,
-            "extracted_text": text[:500],
-            "item_count": len(products),
-            "parsing_method": "AI (email-style)",
-            "notes": "Not specified",
-            "warranties": ["Not specified"],
-            "summary": summary,
-            "payment_terms_available": ["Not specified"],
-            "quantity_tiers": ["Not specified"],
-            "other_info": {"delivery_terms": "Not specified", "return_policy": "Not specified", "support_services": "Not specified", "additional_notes": "Not specified"},
-        }
-    
     def _filter_invalid_products(self, products: List[Dict[str, Any]], text: str) -> List[Dict[str, Any]]:
-        """Filter out products that are actually pricing tiers, delivery info, or other non-product entries"""
+        """Filter out non-products using universal, pattern-based rules (no domain-specific hardcoding)."""
         import re
         import sys
         
-        # Phrases that indicate conversational text, not a product name
-        conversational_phrases = [
-            "good talking", "talking earlier", "lock it in", "if we lock", "let me know", "call or email",
-            "we can do", "get you", "walk you through", "like i said", "ballpark numbers", "rough numbers",
-            "per your request", "following up", "hey there", "thanks,", "best,", "cheers,", "regards,",
-            "this month", "next steps", "give or take", "pretty close", "sharpen the pencil",
-        ]
-        # Document structure: section headers, totals, fees as line items (from PDFs) — not real products
-        non_product_phrases = [
-            "subtotal", "merchandise subtotal", "promotional discount", "estimated total", "total (usd)",
-            "freight (fob", "freight:", "bulk order discount", "total:", "section 3", "section –",
-            "additional charges (may apply)", "note a:", "note a ", "shipping/handling", "rush handling",
-            "storage fee if delivery", "fuel surcharge", "palletization", "custom labeling",
-            "payment:", "delivery:", "balance due", "exact freight", "see section",
-            "(cid:", "(cid)", "content-id",  # PDF encoding artifacts
-            "includes spare units", "see note a", "tbd tbd", "approximate pricing",
-        ]
-        # Standalone or leading words that mean "not a product name"
-        non_product_exact = [
-            "subtotal", "total", "freight", "cell", "payment", "delivery", "note a", "section",
-            "discount", "handling", "surcharge", "fee)", "charges)", "ship-hndl", "ship-hndl)",
-        ]
+        # Minimal universal set: labels that denote document structure in any quote/invoice (not product names)
+        STRUCTURAL_LABELS = {
+            "subtotal", "total", "freight", "tax", "discount", "balance", "amount", "payment", "delivery",
+            "note", "section", "item", "description", "qty", "price", "cell", "phone", "fax", "handling",
+            "surcharge", "fee", "charges", "shipping", "certification", "merchandise", "estimated",
+        }
+        # Sentence starters — line starting with these is likely prose, not a product (exclude "the"/"a" so "The Office Suite" etc. pass)
+        SENTENCE_STARTERS = {
+            "i", "we", "you", "he", "she", "it", "they", "hi", "hello", "so", "if", "let", "thanks", "thank",
+            "best", "here", "this", "that", "what", "when", "where", "how", "can", "could", "would", "may",
+            "might", "good", "on", "re", "following", "dear", "please", "kind", "regards", "per", "as",
+        }
+        # Common stopwords — too many in one "name" => likely a sentence
+        STOPWORDS = {
+            "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "from",
+            "as", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did",
+            "will", "would", "should", "could", "may", "might", "must", "can", "this", "that", "these", "those",
+            "what", "which", "who", "whom", "whose", "where", "when", "why", "how", "all", "each", "every",
+            "some", "any", "no", "not", "only", "just", "also", "too", "very", "much", "many", "more", "most",
+        }
         
         valid_products = []
-        
         for product in products:
             product_name = product.get('name', '').strip()
-            product_name_lower = product_name.lower()
-            
-            # Strip leading "1 ", "2 " etc. (item number from table) so "1 SafetyPro G" -> "SafetyPro G"
+            # Strip leading item numbers (e.g. "1 Product A" -> "Product A")
+            product_name = re.sub(r'^\d+\s*[.)]\s*', '', product_name).strip()
             product_name = re.sub(r'^\d+\s+', '', product_name).strip()
-            product_name_lower = product_name.lower()
             product['name'] = product_name
+            product_name_lower = product_name.lower()
+            words = product_name_lower.split()
+            first = (words[0].lower().rstrip(':,.') if words else "")
             
-            # Skip if product name is clearly conversational (phrase appears in name)
-            if any(phrase in product_name_lower for phrase in conversational_phrases):
-                continue
-            
-            # Skip document structure / totals / PDF artifacts
-            if any(phrase in product_name_lower for phrase in non_product_phrases):
-                continue
-            first_word = product_name_lower.split()[0] if product_name_lower.split() else ''
-            if first_word in non_product_exact and len(product_name_lower.split()) <= 3:
-                continue
-            if product_name_lower in non_product_exact or product_name_lower.strip() in non_product_exact:
-                continue
-            # (cid or (cid: = PDF placeholder for special char
-            if "(cid" in product_name_lower or product_name_lower.startswith("(cid"):
-                continue
-            
-            # Only keep line items that have a clear price (product + price)
+            # Must have a positive price
             pricing_matrix = product.get("pricing_matrix") or []
-            has_positive_price = False
-            for entry in pricing_matrix:
-                up = entry.get("unit_price") or 0
-                tp = entry.get("total_price") or 0
-                if (isinstance(up, (int, float)) and float(up) > 0) or (isinstance(tp, (int, float)) and float(tp) > 0):
-                    has_positive_price = True
-                    break
-            if not has_positive_price and pricing_matrix:
+            has_positive_price = any(
+                (isinstance(e.get("unit_price"), (int, float)) and float(e.get("unit_price") or 0) > 0) or
+                (isinstance(e.get("total_price"), (int, float)) and float(e.get("total_price") or 0) > 0)
+                for e in pricing_matrix
+            )
+            if pricing_matrix and not has_positive_price:
                 continue
             
-            # Skip if product name is too long (likely a paragraph or sentence)
-            if len(product_name) > 100:
-                print(f"[Price Agent] Filtered out long text as product: {product_name[:80]}...", file=sys.stderr, flush=True)
+            # Length: must look like a product name (2–100 chars)
+            if len(product_name) < 2 or len(product_name) > 100:
                 continue
             
-            # Skip if product name contains multiple periods (likely a sentence/paragraph)
-            if product_name.count('.') >= 2:
-                print(f"[Price Agent] Filtered out sentence as product: {product_name[:80]}...", file=sys.stderr, flush=True)
+            # PDF encoding artifact (universal)
+            if "(cid" in product_name_lower:
                 continue
             
-            # Skip if product name looks like a phone number or email
+            # Phone/email in name (universal)
             if re.search(r'[0-9]{3}[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}|@|XXX-XXXX', product_name, re.IGNORECASE):
-                print(f"[Price Agent] Filtered out phone/email as product: {product_name[:50]}", file=sys.stderr, flush=True)
                 continue
             
-            # Skip if product name starts with common sentence starters (conversational, not product names)
-            sentence_starters = ['so', 'hi', 'hello', 'we', 'i', 'let', 'best', 'thanks', 'thank', 'following', 'here', 'this', 'that', 'the', 'a', 'an', 'if', 'when', 'where', 'what', 'who', 'why', 'how', 'can', 'could', 'would', 'should', 'may', 'might', 'must', 'good', 'on', 're']
-            first_word = product_name.split()[0].lower() if product_name.split() else ''
-            if first_word in sentence_starters:
-                print(f"[Price Agent] Filtered out sentence starter as product: {product_name[:50]}", file=sys.stderr, flush=True)
+            # Sentence: multiple periods or starts with sentence starter or too many stopwords
+            if product_name.count('.') >= 2:
+                continue
+            if words and words[0] in SENTENCE_STARTERS:
+                continue
+            stopword_count = sum(1 for w in words if w in STOPWORDS)
+            if stopword_count > 5:
                 continue
             
-            # Skip if product name contains too many common words (likely a sentence)
-            common_words = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'should', 'could', 'may', 'might', 'must', 'can', 'this', 'that', 'these', 'those', 'what', 'which', 'who', 'whom', 'whose', 'where', 'when', 'why', 'how', 'all', 'each', 'every', 'some', 'any', 'no', 'not', 'only', 'just', 'also', 'too', 'very', 'much', 'many', 'more', 'most', 'less', 'least', 'other', 'another', 'such', 'same', 'different', 'like', 'about', 'around', 'over', 'under', 'through', 'during', 'before', 'after', 'above', 'below', 'up', 'down', 'out', 'off', 'away', 'back', 'here', 'there', 'where', 'when', 'why', 'how']
-            word_count = len([w for w in product_name.lower().split() if w in common_words])
-            if word_count > 5:  # Too many common words = likely a sentence
-                print(f"[Price Agent] Filtered out sentence (too many common words) as product: {product_name[:80]}...", file=sys.stderr, flush=True)
+            # Structural line: name is exactly a structural label, or first word is and name is short (≤3 words)
+            name_normalized = product_name_lower.rstrip(':').strip()
+            if name_normalized in STRUCTURAL_LABELS:
+                continue
+            if first in STRUCTURAL_LABELS and len(words) <= 3:
+                continue
+            if re.match(r'^[a-z]+\s*:\s*', product_name_lower) and first in STRUCTURAL_LABELS:
                 continue
             
-            # Skip if product name looks like a pricing tier (e.g., "1–3 kg: USD 69,")
+            # Pattern-based: pricing tier, delivery time, partial price, incomplete calculation, sentence fragment
             if re.match(r'^\d+[–-]\d+\s*(?:kg|lb|units?|pieces?)\s*:', product_name, re.IGNORECASE):
-                print(f"[Price Agent] Filtered out pricing tier as product: {product_name[:50]}", file=sys.stderr, flush=True)
                 continue
-            
-            # Skip if product name looks like delivery time (e.g., "Delivery Time: 10–12 business days")
-            if re.match(r'^(?:Delivery|delivery)\s+Time', product_name, re.IGNORECASE):
-                print(f"[Price Agent] Filtered out delivery info as product: {product_name[:50]}", file=sys.stderr, flush=True)
+            if re.match(r'^(?:delivery)\s+time\b', product_name_lower):
                 continue
-            
-            # Skip if product name looks like certification info
-            if re.match(r'^(?:Certification|certification|Cert|cert)', product_name, re.IGNORECASE):
-                print(f"[Price Agent] Filtered out certification info as product: {product_name[:50]}", file=sys.stderr, flush=True)
-                continue
-            
-            # Skip if product name is just a price range or partial price
             if re.match(r'^USD\s*\d+[,\s]*$', product_name, re.IGNORECASE):
-                print(f"[Price Agent] Filtered out partial price as product: {product_name[:50]}", file=sys.stderr, flush=True)
                 continue
-            
-            # Skip if product name is too short or looks incomplete (e.g., "K (%) Minted Gold Bar")
-            if len(product_name) < 5 or product_name.startswith('K (%)') or product_name.startswith('(%)'):
-                print(f"[Price Agent] Filtered out incomplete product name: {product_name[:50]}", file=sys.stderr, flush=True)
-                continue
-            
-            # Skip if product name contains incomplete calculation (e.g., "Gold Eagles: x =")
             if re.search(r':\s*x\s*=\s*$', product_name, re.IGNORECASE):
-                print(f"[Price Agent] Filtered out incomplete calculation as product: {product_name[:50]}", file=sys.stderr, flush=True)
                 continue
-            
-            # Skip if product name contains "are at" or "is at" (likely part of a sentence)
             if re.search(r'\b(are|is)\s+at\s+', product_name, re.IGNORECASE):
-                print(f"[Price Agent] Filtered out sentence fragment as product: {product_name[:50]}", file=sys.stderr, flush=True)
                 continue
-            
-            # Skip if product name ends with incomplete price (e.g., "approx $2,")
-            if re.search(r'approx\s+\$?\d+[,.]?\s*$', product_name, re.IGNORECASE):
-                print(f"[Price Agent] Filtered out incomplete price as product: {product_name[:50]}", file=sys.stderr, flush=True)
-                continue
-            
-            # Skip if product name contains "give or take" or similar phrases
-            if re.search(r'give\s+or\s+take|roughly|approximately|around|about', product_name, re.IGNORECASE):
-                if len(product_name) > 30:  # Only filter if it's long (likely a sentence)
-                    print(f"[Price Agent] Filtered out sentence with approximation phrase as product: {product_name[:50]}", file=sys.stderr, flush=True)
-                    continue
             
             valid_products.append(product)
         
