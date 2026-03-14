@@ -1654,7 +1654,7 @@ Return ONLY valid JSON. No markdown, no code blocks, no explanatory text. Just t
             name = re.sub(r'\s+', ' ', name).strip()
             if len(name) < 2 or len(name) > 150:
                 continue
-            if any(x in name.lower() for x in ["thanks", "best,", "let me", "if we", "good talking", "call or", "hey there"]):
+            if any(x in name.lower() for x in ["thanks", "best,", "let me", "if we", "good talking", "call or", "hey there"]) or name.lower().strip() == "cell":
                 continue
             unit_price = float(m.group(2))
             qty = int(m.group(3)) if m.group(3) else default_qty
@@ -1746,6 +1746,21 @@ Return ONLY valid JSON. No markdown, no code blocks, no explanatory text. Just t
             "per your request", "following up", "hey there", "thanks,", "best,", "cheers,", "regards,",
             "this month", "next steps", "give or take", "pretty close", "sharpen the pencil",
         ]
+        # Document structure: section headers, totals, fees as line items (from PDFs) — not real products
+        non_product_phrases = [
+            "subtotal", "merchandise subtotal", "promotional discount", "estimated total", "total (usd)",
+            "freight (fob", "freight:", "bulk order discount", "total:", "section 3", "section –",
+            "additional charges (may apply)", "note a:", "note a ", "shipping/handling", "rush handling",
+            "storage fee if delivery", "fuel surcharge", "palletization", "custom labeling",
+            "payment:", "delivery:", "balance due", "exact freight", "see section",
+            "(cid:", "(cid)", "content-id",  # PDF encoding artifacts
+            "includes spare units", "see note a", "tbd tbd", "approximate pricing",
+        ]
+        # Standalone or leading words that mean "not a product name"
+        non_product_exact = [
+            "subtotal", "total", "freight", "cell", "payment", "delivery", "note a", "section",
+            "discount", "handling", "surcharge", "fee)", "charges)", "ship-hndl", "ship-hndl)",
+        ]
         
         valid_products = []
         
@@ -1753,8 +1768,25 @@ Return ONLY valid JSON. No markdown, no code blocks, no explanatory text. Just t
             product_name = product.get('name', '').strip()
             product_name_lower = product_name.lower()
             
+            # Strip leading "1 ", "2 " etc. (item number from table) so "1 SafetyPro G" -> "SafetyPro G"
+            product_name = re.sub(r'^\d+\s+', '', product_name).strip()
+            product_name_lower = product_name.lower()
+            product['name'] = product_name
+            
             # Skip if product name is clearly conversational (phrase appears in name)
             if any(phrase in product_name_lower for phrase in conversational_phrases):
+                continue
+            
+            # Skip document structure / totals / PDF artifacts
+            if any(phrase in product_name_lower for phrase in non_product_phrases):
+                continue
+            first_word = product_name_lower.split()[0] if product_name_lower.split() else ''
+            if first_word in non_product_exact and len(product_name_lower.split()) <= 3:
+                continue
+            if product_name_lower in non_product_exact or product_name_lower.strip() in non_product_exact:
+                continue
+            # (cid or (cid: = PDF placeholder for special char
+            if "(cid" in product_name_lower or product_name_lower.startswith("(cid"):
                 continue
             
             # Only keep line items that have a clear price (product + price)
