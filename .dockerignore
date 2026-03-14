@@ -1,0 +1,19 @@
+# Git and local dev
+.git
+.gitignore
+.env
+.env.*
+*.md
+node_modules
+**/node_modules
+**/venv
+**/.venv
+**/__pycache__
+**/*.pyc
+**/*.db
+**/dist
+frontend/dist
+backend/procurement.db
+uploads
+*.pdf
+.DS_Store
