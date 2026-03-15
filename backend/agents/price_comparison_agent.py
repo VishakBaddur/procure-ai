@@ -121,6 +121,12 @@ class PriceComparisonAgent:
             base_result["raw_text_preview"] = ""
             return base_result
         
+        # Log raw extracted text for production debugging (Render logs)
+        import sys
+        _preview = (extracted_text or "")[:800].replace("\r", "\n")
+        print(f"[QuoteParse] RAW_EXTRACTED_TEXT_LEN={len(extracted_text or '')}", file=sys.stderr, flush=True)
+        print(f"[QuoteParse] RAW_EXTRACTED_TEXT_PREVIEW=\n{_preview}", file=sys.stderr, flush=True)
+        
         # Parse pricing information
         pricing_data = await self._parse_pricing(extracted_text, vendor_name)
         
@@ -236,15 +242,32 @@ class PriceComparisonAgent:
                 pass
         return text
     
+    def _log_email_style_heuristic(self, text: str) -> bool:
+        """Diagnostic only: does text look like an email? Logged for Render debugging; does not change code path."""
+        if not text or len(text) < 50:
+            return False
+        t = text.lower()
+        markers = [
+            "good talking", "hey there", "let me know", "thanks,", "best,",
+            "per your request", "following up", "re: ", "subject:", "call or email",
+        ]
+        return sum(1 for m in markers if m in t) >= 2
+
     async def _parse_pricing(self, text: str, vendor_name: str) -> Dict[str, Any]:
         """Parse pricing: use Groq/Ollama as the single parser when available (understands any format); regex only when no LLM."""
+        import sys
+        email_style = self._log_email_style_heuristic(text)
+        print(f"[QuoteParse] EMAIL_STYLE_HEURISTIC={email_style} (diagnostic only, path unchanged)", file=sys.stderr, flush=True)
         if self.use_ai:
+            print(f"[QuoteParse] EXTRACTION_PATH=LLM (attempting)", file=sys.stderr, flush=True)
             try:
-                return await self._parse_with_ai(text, vendor_name)
+                result = await self._parse_with_ai(text, vendor_name)
+                print(f"[QuoteParse] EXTRACTION_PATH=LLM (success)", file=sys.stderr, flush=True)
+                return result
             except Exception as e:
-                import sys
-                print(f"[Price Agent] LLM parsing failed, falling back to regex: {e}", file=sys.stderr, flush=True)
-        # No LLM (Groq/Ollama) available, or LLM failed: use regex fallback
+                print(f"[QuoteParse] EXTRACTION_PATH=regex (LLM failed: {e})", file=sys.stderr, flush=True)
+                return self._parse_with_regex(text, vendor_name)
+        print(f"[QuoteParse] EXTRACTION_PATH=regex (no LLM available)", file=sys.stderr, flush=True)
         return self._parse_with_regex(text, vendor_name)
     
     async def _parse_with_ai(self, text: str, vendor_name: str) -> Dict[str, Any]:
@@ -324,8 +347,10 @@ class PriceComparisonAgent:
             
             # Use local LLM (Ollama) or Groq for extraction — same prompt for both
             if self.use_local_llm:
+                print(f"[QuoteParse] EXTRACTION_LLM=Ollama", file=sys.stderr, flush=True)
                 return await self._parse_with_local_llm(text, vendor_name, prompt)
             
+            print(f"[QuoteParse] EXTRACTION_LLM=Groq", file=sys.stderr, flush=True)
             # Use Groq (fallback)
             # Use a more capable model for complex extraction
             system_message = """You are the sole extractor for vendor quotes. Return ONLY real product/service line items with prices. The app will show exactly what you return.
@@ -333,7 +358,7 @@ class PriceComparisonAgent:
 RULES: (1) Product "name" = short name only (e.g. "Basic wrap goggles", "Hard hats"). Never use a sentence, greeting, or contact line (Cell, Phone) as a product name. (2) Include ONLY actual goods/services being sold with a price—never Subtotal, Total, Freight, or sentences about timing/shipping/payment. (3) One product per item; pricing tiers go in pricing_matrix. (4) Use "Not specified" for any missing field. Return only valid JSON."""
             
             response = self.client.chat.completions.create(
-                model="llama-3.1-70b-versatile",
+                model="llama-3.3-70b-versatile",
                 messages=[
                     {
                         "role": "system", 
@@ -421,6 +446,10 @@ RULES: (1) Product "name" = short name only (e.g. "Basic wrap goggles", "Hard ha
         summary = pricing_data.get("summary", {}) or {}
         currency = (summary.get("currency") or pricing_data.get("currency") or "USD").strip() or "USD"
         
+        # Log what LLM returned (before any normalization) for production debugging
+        before_names = [p.get("name", "") for p in products]
+        print(f"[QuoteParse] PRODUCTS_FROM_LLM_BEFORE_NORMALIZATION count={len(products)} names={before_names}", file=sys.stderr, flush=True)
+        
         # Minimal normalization: ensure each product has name, pricing_matrix, warranty; strip leading item numbers from name
         for p in products:
             name = (p.get("name") or "Unknown Product").strip()
@@ -432,7 +461,8 @@ RULES: (1) Product "name" = short name only (e.g. "Basic wrap goggles", "Hard ha
             if not p.get("warranty"):
                 p["warranty"] = "Not specified"
         
-        print(f"[Price Agent] Groq/LLM returned {len(products)} products; displaying as-is.", file=sys.stderr, flush=True)
+        after_names = [p.get("name", "") for p in products]
+        print(f"[QuoteParse] PRODUCTS_TO_DISPLAY_AFTER_NORMALIZATION count={len(products)} names={after_names}", file=sys.stderr, flush=True)
         
         # Build legacy items and total from Groq output
         items = []
@@ -1557,7 +1587,8 @@ RULES: (1) Product "name" = short name only (e.g. "Basic wrap goggles", "Hard ha
     
     def _parse_with_regex(self, text: str, vendor_name: str) -> Dict[str, Any]:
         """Fallback regex-based parsing for when AI is not available"""
-        
+        import sys
+        print(f"[QuoteParse] EXTRACTION_PATH=regex (running)", file=sys.stderr, flush=True)
         items = []
         total_price = 0.0
         currency = "USD"
@@ -1642,6 +1673,8 @@ RULES: (1) Product "name" = short name only (e.g. "Basic wrap goggles", "Hard ha
                     "unit": "total"
                 })
         
+        regex_names = [i.get("name", "") for i in items]
+        print(f"[QuoteParse] REGEX_ITEMS_EXTRACTED count={len(items)} names={regex_names}", file=sys.stderr, flush=True)
         return {
             "vendor_name": vendor_name,
             "items": items,

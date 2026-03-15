@@ -185,7 +185,7 @@ IMPORTANT:
             else:
                 # Use Groq
                 response = self.groq_client.chat.completions.create(
-                    model="llama-3.1-70b-versatile",
+                    model="llama-3.3-70b-versatile",
                     messages=[
                         {"role": "system", "content": "You are a procurement decision assistant. Analyze vendor data and provide recommendations. Return only valid JSON."},
                         {"role": "user", "content": prompt}
