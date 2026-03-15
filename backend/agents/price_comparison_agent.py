@@ -523,7 +523,8 @@ RULES: (1) Product "name" = short name only (e.g. "Basic wrap goggles", "Hard ha
                     })
                     total_price += float(product_total) if product_total else float(unit_price * quantity)
         
-        if summary.get("total_price_range"):
+        # Prefer summed line-item total over LLM summary total (LLM sometimes returns one product's total as doc total)
+        if summary.get("total_price_range") and total_price <= 0:
             total_price = summary["total_price_range"].get("max", total_price)
         
         warranties = pricing_data.get("warranties", [])
