@@ -251,139 +251,21 @@ class PriceComparisonAgent:
         """Use Groq AI to intelligently extract pricing information with products, payment terms, and quantity tiers"""
         
         prompt = f"""
-        You are a procurement data extraction specialist. Extract ALL information from this vendor quote and return it in a structured JSON format.
+        You are the only extractor for this quote. Your job: read the document/email text and return ONLY real product or service line items with prices. The UI will display exactly what you return.
+
         Vendor: {vendor_name}
-        
-        Document text:
-        {text[:8000]}
-        
-        CRITICAL REQUIREMENTS - YOU MUST FOLLOW THESE EXACTLY:
-        
-        **SPECIAL HANDLING FOR EMAIL/INFORMAL QUOTES:**
-        - Email quotes are often conversational and informal - extract information even if not perfectly structured
-        - Handle approximate values: "~$75k" → 75000, "31–32 oz" → use midpoint (31.5) or range
-        - Calculate totals from unit prices × quantities when totals are not explicitly stated
-        - Extract fees separately (setup fees, storage fees, etc.) as additional line items
-        - Products may be mentioned in natural language: "Gold American Eagles" and "Silver Eagles" are TWO separate products
-        
-        **EXAMPLE EMAIL QUOTE HANDLING:**
-        Text: "Gold American Eagles: $2,395/oz, ~31-32 oz for ~$75k. Silver Eagles: $31.80/oz, ~780-800 oz for ~$25k. Setup: $200. Storage: $150-200/year."
-        
-        Expected extraction:
-        - Product 1: "Gold American Eagles"
-          * Unit price: $2,395 per oz
-          * Quantity: 31.5 oz (midpoint of 31-32)
-          * Total: $75,000 (or calculate: 2395 × 31.5 = $75,442.50)
-        - Product 2: "Silver Eagles"  
-          * Unit price: $31.80 per oz
-          * Quantity: 790 oz (midpoint of 780-800)
-          * Total: $25,000 (or calculate: 31.80 × 790 = $25,122)
-        - Additional fees: Setup $200, Storage $150-200/year
-        
-        1. **EXTRACT EVERY PRODUCT MENTIONED**: 
-           - If text says "five different products" or lists products (e.g., "including X, Y, Z"), create a SEPARATE entry for EACH product
-           - In emails, products may be mentioned as: "Gold American Eagles" and "Silver Eagles" - these are TWO products
-           - Look for product names followed by pricing: "Gold Eagles: $2,395/oz" → Product: "Gold Eagles", unit_price: 2395, unit: "oz"
-           - Each product gets its own object in the "products" array
-           - DO NOT combine products into one entry
-           - If no products are mentioned, return empty products array
-        
-        2. **EXTRACT ALL PRICING COMBINATIONS**:
-           - For EACH product, create pricing_matrix entries for EVERY combination of:
-             * Quantity tier (e.g., 1-5 kg, 6-20 kg)
-             * Payment term (e.g., full advance, 50% advance, LC at sight)
-           - If pricing applies to all products, replicate it for each product
-           - If pricing is NOT specified for a product, set pricing_matrix to empty array [] and add note: "Pricing not specified"
-        
-        3. **EXTRACT WARRANTIES FOR EACH PRODUCT**:
-           - For EACH product, extract warranty information if mentioned
-           - If warranty is NOT specified for a product, set warranty field to "Not specified"
-           - Also extract general warranties in the top-level "warranties" array
-        
-        4. **PAYMENT TERMS** - Extract exactly as mentioned:
-           - "full advance payment" → "Full Advance"
-           - "50% advance with balance on delivery" → "50% Advance, Balance on Delivery"
-           - "LC at sight" → "LC at Sight"
-           - If not specified, use "Not specified"
-        
-        5. **QUANTITY TIERS** - Extract ranges exactly:
-           - "1–5 kg" → quantity_min: 1, quantity_max: 5, quantity_unit: "kg"
-           - "6–20 kg" → quantity_min: 6, quantity_max: 20, quantity_unit: "kg"
-        
-        6. **PRICES** - Extract unit prices COMPLETELY:
-           - "USD 68,500 per kg" → unit_price: 68500, quantity_unit: "kg", currency: "USD"
-           - "$2,395/oz" → unit_price: 2395, quantity_unit: "oz", currency: "USD"
-           - "$31.80/oz" → unit_price: 31.80, quantity_unit: "oz", currency: "USD"
-           - "~$75k" or "approximately $75,000" → extract as 75000
-           - DO NOT extract partial prices like "USD 68," or "USD 500" when the full price is "USD 68,500"
-           - ALWAYS extract the COMPLETE price including all digits
-           - If you see "USD 68,500", extract 68500, NOT 68 or 500
-           - Handle approximate values: use the stated approximate value or calculate from unit_price × quantity
-           
-        6a. **CALCULATE TOTALS FROM UNIT PRICES × QUANTITIES**:
-           - If text says "Gold Eagles: $2,395/oz, ~31-32 oz for ~$75k"
-           - Extract: unit_price=2395, quantity_min=31, quantity_max=32
-           - Calculate total: Use the stated total ($75,000) OR calculate (2395 × 31.5 = $75,442.50)
-           - Prefer stated totals when available, but calculate if needed
-           - For ranges like "31–32 oz", use midpoint (31.5) for calculations
-        
-        7. **EXTRACT FEES AND ADDITIONAL COSTS**:
-           - Setup fees: "Account setup: $200" → add as separate product or note
-           - Storage fees: "Storage: $150-200/year" → extract and note
-           - Shipping costs: "No shipping costs" → note as "Included" or "Free"
-           - These can be added as separate line items with product name like "Setup Fee" or "Storage Fee"
-           
-        8. **MISSING INFORMATION HANDLING**:
-           - If ANY field is not specified in the text, use "Not specified" as the value
-           - Do NOT leave fields empty or null unless explicitly allowed
-           - Be explicit about what information is missing
-           - For approximate values, extract the best estimate (use midpoint for ranges)
-        
-        EXAMPLE EXTRACTION:
-        Text: "Aurum Precious Metals offers five different gold products, including 24K cast gold bars, 24K minted gold bars, 24K gold coins, 22K gold biscuits, and 24K gold grain. 
-               For 1-5 kg: USD 68,500/kg (full advance), USD 69,200/kg (50% advance), USD 69,800/kg (LC at sight).
-               For 6-20 kg: USD 67,800/kg (full advance), USD 68,400/kg (50% advance), USD 69,000/kg (LC at sight).
-               Warranty: 1 year on all products."
-        
-        Expected output: EXACTLY 5 separate products:
-        - Product 1: name="24K cast gold bars" (NOT "Aurum Precious Metals offers five different gold products, including 24K cast gold bars...")
-        - Product 2: name="24K minted gold bars"
-        - Product 3: name="24K gold coins"
-        - Product 4: name="22K gold biscuits"
-        - Product 5: name="24K gold grain"
-        
-        Each product should have 6 pricing_matrix entries (2 quantity tiers × 3 payment terms) and warranty: "1 year"
-        
-        WRONG OUTPUT (DO NOT DO THIS):
-        - Product 1: name="Aurum Precious Metals offers five different gold products, including 24K cast gold bars, 24K minted gold bars, 24K gold coins, 22K gold biscuits, and 24K gold grain"
-        
-        This is WRONG because it combines all 5 products into one entry!
-        
-        IMPORTANT SCENARIOS TO HANDLE:
-        - Vendor offers 5 different product varieties, each with 3 payment terms, and 2 quantity tiers = 30 price points
-        - Vendor offers 1 product with different pricing for different quantities
-        - Mixed scenarios with some products having more options than others
-        - Products mentioned in lists (e.g., "including X, Y, Z products")
-        - Products without pricing information → mark as "Not specified"
-        - Products without warranty information → mark as "Not specified"
-        
-        CRITICAL: DO NOT CREATE PRODUCTS FROM PRICING TIERS!
-        - If text says "1–3 kg: USD 69,000 per kg", this is a PRICING TIER, NOT a product
-        - If text says "Product: 24K Minted Gold Bar" with pricing "1–3 kg: USD 69,000", create:
-          * ONE product: "24K Minted Gold Bar"
-          * With pricing_matrix containing the tier "1–3 kg: USD 69,000"
-        - DO NOT create separate products for each pricing tier
-        - Pricing tiers go in the pricing_matrix array, NOT as separate products
-        
-        CRITICAL: ONLY EXTRACT ACTUAL PRODUCT/SERVICE LINE ITEMS — NEVER THESE:
-        - Section headers (e.g. "Section 3", "Additional Charges", "Note A")
-        - Totals or summary rows: "Subtotal", "Total", "Freight", "Tax", "Discount", "Balance Due", "Merchandise Subtotal", "Estimated Total"
-        - Contact/labels: "Cell", "Phone", "Fax", "Email" (these are contact labels, not products)
-        - Document structure: "Payment:", "Delivery:", "Certification:" when the line is a label only
-        - PDF artifacts: anything containing "(cid" or placeholder text
-        - A line is a product ONLY if it describes something being sold with a price (item + unit price or line total)
-        
-        Return a JSON object with this exact structure:
+
+        Document text (from PDF, email, or upload):
+        {text[:12000]}
+
+        RULES YOU MUST FOLLOW:
+        1. **Product name**: Short, clear name only (e.g. "Basic wrap goggles", "Hard hats", "Hi-vis vests", "Starter pack"). NEVER use a full sentence, greeting, or clause as a product name.
+        2. **Only real line items**: Include ONLY items that are clearly goods or services being sold with a price. Do NOT include as products: section headers, Subtotal/Total/Freight/Tax, contact labels (Cell, Phone, Fax, Email), or any sentence about the call, timing, shipping, or payment (e.g. "Good talking earlier", "On timing: we ship in X days", "Payment-wise, most folks prepay", "Cell:--").
+        3. **Prices**: Extract full unit price and total where stated. Use quantity_min/quantity_max for ranges. Currency in pricing_matrix. Use "Not specified" for missing fields.
+        4. **One product per item**: Each distinct product/service gets one object in "products". Do not combine multiple products into one. Pricing tiers (e.g. "1–5 kg: USD X") go inside pricing_matrix of the product, not as separate products.
+        5. **Structure**: Each product must have: name, description (or "Not specified"), category (or "Not specified"), pricing_matrix (array of at least one entry with unit_price or total_price, quantity_min/max, quantity_unit, payment_terms, currency), warranty, delivery_time. Use "Not specified" for any missing value.
+
+        Return ONLY valid JSON in this exact structure:
         {{
             "products": [
                 {{
@@ -432,26 +314,6 @@ class PriceComparisonAgent:
             }}
         }}
         
-        MANDATORY RULES - FOLLOW EXACTLY:
-        1. **CRITICAL**: If text says "five different products" or lists products with commas, create EXACTLY that many separate product entries
-        2. **Product names must be short**: Extract just the product name (e.g., "24K cast gold bars"), NOT the full sentence
-        3. **Each product gets same pricing**: If pricing applies to all products, replicate the pricing_matrix for each product
-        4. **Warranty extraction**: Extract warranty for EACH product individually. If not specified, use "Not specified"
-        5. **Pricing extraction**: Extract pricing for EACH product. If not specified, use empty array [] and note it
-        6. Extract payment terms exactly: "full advance payment" → "Full Advance", "50% advance with balance on delivery" → "50% Advance, Balance on Delivery", "LC at sight" → "LC at Sight"
-        7. Extract quantity ranges: "1–5 kg" → quantity_min: 1, quantity_max: 5, quantity_unit: "kg"
-        8. Extract unit prices: "USD 68,500 per kg" → unit_price: 68500, currency: "USD"
-        9. **DO NOT** create one product with the entire text as the name
-        10. **DO NOT** combine multiple products into one entry
-        11. **ALWAYS** use "Not specified" for missing information - never leave fields empty or null
-        
-        VALIDATION CHECKLIST before returning:
-        - If text mentions "5 products", verify you have exactly 5 entries in products array
-        - Each product name should be 2-8 words, not a full sentence
-        - Each product should have warranty field (even if "Not specified")
-        - Each product should have pricing_matrix (even if empty)
-        - All missing fields should say "Not specified"
-        
         Return ONLY valid JSON. No markdown, no code blocks, no explanatory text. Just the JSON object.
         """
         
@@ -460,62 +322,15 @@ class PriceComparisonAgent:
             print(f"[Price Agent] Processing quote for {vendor_name}, text length: {len(text)}", file=sys.stderr, flush=True)
             print(f"[Price Agent] First 500 chars: {text[:500]}", file=sys.stderr, flush=True)
             
-            # Use local LLM (Ollama) or Groq for extraction
+            # Use local LLM (Ollama) or Groq for extraction — same prompt for both
             if self.use_local_llm:
-                return await self._parse_with_local_llm(text, vendor_name)
+                return await self._parse_with_local_llm(text, vendor_name, prompt)
             
             # Use Groq (fallback)
             # Use a more capable model for complex extraction
-            system_message = """You are an expert at extracting structured procurement data from vendor quotations.
+            system_message = """You are the sole extractor for vendor quotes. Return ONLY real product/service line items with prices. The app will show exactly what you return.
 
-CRITICAL RULES YOU MUST FOLLOW - THESE ARE MANDATORY:
-
-1. **PRODUCT COUNTING**: If text says "five different products" or "5 products" or lists products with commas (e.g., "including X, Y, Z, and W"), you MUST create EXACTLY that many separate product entries in the "products" array. Count the products mentioned!
-
-2. **PRODUCT NAMES MUST BE SHORT**: Extract ONLY the product name itself (2-8 words maximum)
-   - CORRECT: "24K cast gold bars"
-   - CORRECT: "24K minted gold bars"
-   - CORRECT: "22K gold biscuits"
-   - WRONG: "Aurum Precious Metals offers five different gold products, including 24K cast gold bars, 24K minted gold bars..."
-   - WRONG: "24K cast gold bars, 24K minted gold bars, 24K gold coins" (this is 3 products, not 1!)
-
-3. **SPLIT PRODUCTS**: When you see "including X, Y, Z, and W", create SEPARATE entries:
-   - Text: "including 24K cast gold bars, 24K minted gold bars, 24K gold coins, 22K gold biscuits, and 24K gold grain"
-   - Create 5 products:
-     * Product 1: name="24K cast gold bars"
-     * Product 2: name="24K minted gold bars"
-     * Product 3: name="24K gold coins"
-     * Product 4: name="22K gold biscuits"
-     * Product 5: name="24K gold grain"
-   - NOT: One product with name="24K cast gold bars, 24K minted gold bars, 24K gold coins, 22K gold biscuits, and 24K gold grain"
-
-4. **PRICING REPLICATION**: If pricing applies to all products equally, replicate the SAME pricing_matrix for EACH product
-
-5. **NEVER COMBINE**: NEVER combine multiple products into one entry. Each product gets its own object.
-
-6. **NEVER USE FULL SENTENCES**: NEVER use the entire sentence or description as a product name. Extract just the product name.
-
-7. **PRICING TIERS ARE NOT PRODUCTS**: Pricing tiers (like "1–3 kg: USD 69,000") go in the pricing_matrix, NOT as separate products. Only actual product names are products.
-
-8. **EXTRACT COMPLETE PRICES**: When you see "USD 68,500 per kg", extract the FULL price: 68500. Do NOT extract partial prices like 68 or 500.
-
-9. **HANDLE EMAIL/INFORMAL QUOTES**:
-   - Products may be mentioned conversationally: "We're recommending Gold American Eagles and Silver Eagles" → TWO products
-   - Extract unit prices even if written as "$2,395/oz" (no space)
-   - Handle approximate quantities: "31–32 oz" → quantity_min: 31, quantity_max: 32, or use midpoint 31.5
-   - Calculate totals: If "~$75k for 31-32 oz at $2,395/oz", verify: 2395 × 31.5 ≈ 75,442 (close to $75k)
-   - Extract fees: "Setup: $200" → create product "Setup Fee" with price 200, or add to notes
-   - Look for patterns: "Product: price/unit, quantity, total" or "Product: price/unit (quantity for total)"
-
-10. **QUANTITY EXTRACTION FROM EMAILS**:
-    - "~31–32 oz" → quantity_min: 31, quantity_max: 32
-    - "780–800 oz" → quantity_min: 780, quantity_max: 800
-    - "around 40 oz" → quantity: 40 (or range 38-42 if context suggests)
-    - Use midpoint for calculations when range is given
-
-VALIDATION: Before returning, count your products. If text says "5 products" and you only have 1 product entry, you made an error!
-VALIDATION: For email quotes, verify totals make sense: unit_price × quantity should approximately equal stated total.
-"""
+RULES: (1) Product "name" = short name only (e.g. "Basic wrap goggles", "Hard hats"). Never use a sentence, greeting, or contact line (Cell, Phone) as a product name. (2) Include ONLY actual goods/services being sold with a price—never Subtotal, Total, Freight, or sentences about timing/shipping/payment. (3) One product per item; pricing tiers go in pricing_matrix. (4) Use "Not specified" for any missing field. Return only valid JSON."""
             
             response = self.client.chat.completions.create(
                 model="llama-3.1-70b-versatile",
@@ -554,124 +369,11 @@ VALIDATION: For email quotes, verify totals make sense: unit_price × quantity s
             traceback.print_exc(file=sys.stderr)
             return self._parse_with_regex(text, vendor_name)
     
-    async def _parse_with_local_llm(self, text: str, vendor_name: str) -> Dict[str, Any]:
-        """Use local LLM (Ollama) to intelligently extract pricing information"""
+    async def _parse_with_local_llm(self, text: str, vendor_name: str, prompt: str) -> Dict[str, Any]:
+        """Use local LLM (Ollama) with same extraction prompt as Groq."""
         import sys
-        
         try:
             print(f"[Price Agent] Using local LLM (Ollama) for parsing", file=sys.stderr, flush=True)
-            
-            # Use the same prompt as Groq version
-            prompt = f"""
-You are a procurement data extraction specialist. Extract ALL information from this vendor quote and return it in a structured JSON format.
-Vendor: {vendor_name}
-
-Document text:
-{text[:8000]}
-
-CRITICAL REQUIREMENTS - YOU MUST FOLLOW THESE EXACTLY:
-
-1. **EXTRACT EVERY PRODUCT MENTIONED**: 
-   - If text says "five different products" or lists products (e.g., "including X, Y, Z"), create a SEPARATE entry for EACH product
-   - Each product gets its own object in the "products" array
-   - DO NOT combine products into one entry
-   - If no products are mentioned, return empty products array
-
-2. **EXTRACT ALL PRICING COMBINATIONS**:
-   - For EACH product, create pricing_matrix entries for EVERY combination of:
-     * Quantity tier (e.g., 1-5 kg, 6-20 kg)
-     * Payment term (e.g., full advance, 50% advance, LC at sight)
-   - If pricing applies to all products, replicate it for each product
-   - If pricing is NOT specified for a product, set pricing_matrix to empty array [] and add note: "Pricing not specified"
-
-3. **EXTRACT WARRANTIES FOR EACH PRODUCT**:
-   - For EACH product, extract warranty information if mentioned
-   - If warranty is NOT specified for a product, set warranty field to "Not specified"
-   - Also extract general warranties in the top-level "warranties" array
-
-4. **PAYMENT TERMS** - Extract exactly as mentioned:
-   - "full advance payment" → "Full Advance"
-   - "50% advance with balance on delivery" → "50% Advance, Balance on Delivery"
-   - "LC at sight" → "LC at Sight"
-   - If not specified, use "Not specified"
-
-5. **QUANTITY TIERS** - Extract ranges exactly:
-   - "1–5 kg" → quantity_min: 1, quantity_max: 5, quantity_unit: "kg"
-   - "6–20 kg" → quantity_min: 6, quantity_max: 20, quantity_unit: "kg"
-
-6. **PRICES** - Extract unit prices COMPLETELY:
-   - "USD 68,500 per kg" → unit_price: 68500, quantity_unit: "kg", currency: "USD"
-   - "USD 69,200 per kg" → unit_price: 69200, quantity_unit: "kg", currency: "USD"
-   - DO NOT extract partial prices like "USD 68," or "USD 500" when the full price is "USD 68,500"
-   - ALWAYS extract the COMPLETE price including all digits
-   - If you see "USD 68,500", extract 68500, NOT 68 or 500
-
-7. **MISSING INFORMATION HANDLING**:
-   - If ANY field is not specified in the text, use "Not specified" as the value
-   - Do NOT leave fields empty or null unless explicitly allowed
-   - Be explicit about what information is missing
-
-8. **HANDLE APPROXIMATE VALUES**:
-   - If quantities or prices are approximate (e.g., "~$75k", "31–32 oz", "around $100,000"), extract the numerical range or the approximate value.
-   - For ranges like "31–32 oz", use `quantity_min` and `quantity_max`.
-   - For approximate monetary values, extract the number and note the approximation.
-
-9. **FEES EXTRACTION**:
-   - Extract any explicit fees mentioned (e.g., "Account setup: $200", "Storage: $150–$200 annually") as separate products with category "Fee".
-   - Specify if they are one-time or annual.
-
-Return a JSON object with this exact structure:
-{{
-    "products": [
-        {{
-            "product_id": "unique identifier",
-            "name": "product name/variety/model",
-            "description": "detailed description if available, or 'Not specified'",
-            "category": "product category if mentioned, or 'Not specified'",
-            "pricing_matrix": [
-                {{
-                    "quantity_min": <minimum quantity or null>,
-                    "quantity_max": <maximum quantity or null for unlimited>,
-                    "quantity_unit": "unit type (e.g., 'units', 'pieces', 'kg', 'lb', 'oz', 'one-time', 'year') or 'Not specified'",
-                    "payment_terms": "payment term (e.g., 'Net 30', 'Upfront', '50% Advance', 'Net 60') or 'Not specified'",
-                    "unit_price": <price per unit or null if not specified>,
-                    "total_price": <total price for this quantity tier or null>,
-                    "currency": "currency code (e.g., 'USD', 'EUR') or 'Not specified'",
-                    "notes": "any special notes (e.g., 'bulk discount', 'early payment discount', 'approximate pricing') or 'Not specified'"
-                }}
-            ],
-            "default_payment_term": "most common payment term if applicable, or 'Not specified'",
-            "warranty": "warranty information if mentioned, or 'Not specified'",
-            "delivery_time": "delivery time if mentioned, or 'Not specified'"
-        }}
-    ],
-    "summary": {{
-        "total_products": <number of different products>,
-        "currency": "primary currency (USD, EUR, etc.) or 'Not specified'",
-        "payment_terms_available": ["list of all payment terms found, or ['Not specified'] if none"],
-        "quantity_tiers": ["list of quantity ranges found, or ['Not specified'] if none"],
-        "total_price_range": {{
-            "min": <minimum total price or null>,
-            "max": <maximum total price or null>
-        }}
-    }},
-    "general_notes": "any general pricing notes, discounts, or conditions, or 'Not specified'",
-    "warranties": ["list of warranty information, or ['Not specified'] if none"],
-    "other_info": {{
-        "delivery_terms": "delivery terms if mentioned, or 'Not specified'",
-        "return_policy": "return policy if mentioned, or 'Not specified'",
-        "support_services": "support services if mentioned, or 'Not specified'",
-        "additional_notes": "any other relevant information, or 'Not specified'"
-    }},
-    "extraction_metadata": {{
-        "parsing_method": "AI",
-        "confidence": "high/medium/low"
-    }}
-}}
-
-Return ONLY valid JSON. No markdown, no code blocks, no explanatory text. Just the JSON object.
-"""
-            
             # Call Ollama API
             response = requests.post(
                 f"{self.ollama_url}/api/generate",
@@ -711,65 +413,28 @@ Return ONLY valid JSON. No markdown, no code blocks, no explanatory text. Just t
             return self._parse_with_regex(text, vendor_name)
     
     def _process_ai_response(self, pricing_data: Dict[str, Any], text: str, vendor_name: str) -> Dict[str, Any]:
-        """Process AI response (shared between local LLM and Groq)"""
+        """Trust Groq/LLM output: minimal validation, then build display structure. Extraction responsibility is entirely with the LLM."""
         import sys
         import re
         
-        print(f"[Price Agent] Extracted products count: {len(pricing_data.get('products', []))}", file=sys.stderr, flush=True)
-        if pricing_data.get('products'):
-            print(f"[Price Agent] Product names: {[p.get('name') for p in pricing_data.get('products', [])]}", file=sys.stderr, flush=True)
+        products = pricing_data.get("products", []) or []
+        summary = pricing_data.get("summary", {}) or {}
+        currency = (summary.get("currency") or pricing_data.get("currency") or "USD").strip() or "USD"
         
-        # Validate and normalize the new structure
-        products = pricing_data.get("products", [])
-        summary = pricing_data.get("summary", {})
-        currency = summary.get("currency", pricing_data.get("currency", "USD"))
+        # Minimal normalization: ensure each product has name, pricing_matrix, warranty; strip leading item numbers from name
+        for p in products:
+            name = (p.get("name") or "Unknown Product").strip()
+            name = re.sub(r'^\d+\s*[.)]\s*', '', name).strip()
+            name = re.sub(r'^\d+\s+', '', name).strip()
+            p["name"] = name or p.get("name") or "Unknown Product"
+            if not p.get("pricing_matrix"):
+                p["pricing_matrix"] = []
+            if not p.get("warranty"):
+                p["warranty"] = "Not specified"
         
-        # FIRST: Try aggressive breakdown extraction if we have a breakdown section
-        breakdown_pattern = r'Breakdown[^:]*?:\s*(.*?)(?:\n\n|\n[A-Z][a-z]+\s+[A-Z]|Setup|Storage|We can|Let me|Best|$)'
-        breakdown_match = re.search(breakdown_pattern, text, re.IGNORECASE | re.DOTALL)
-        if breakdown_match:
-            print(f"[Price Agent] Found breakdown section, attempting direct extraction...", file=sys.stderr, flush=True)
-            breakdown_products = self._aggressive_email_extraction(text, currency)
-            if breakdown_products and len(breakdown_products) > 0:
-                # Use breakdown products if they're valid
-                valid_breakdown = [p for p in breakdown_products if len(p.get('name', '')) < 100 and p.get('name', '').count('.') < 2]
-                if valid_breakdown:
-                    print(f"[Price Agent] Using {len(valid_breakdown)} products from breakdown extraction", file=sys.stderr, flush=True)
-                    products = valid_breakdown
-                    # Still add fees
-                    fee_products = [p for p in products if 'fee' in p.get('category', '').lower() or 'fee' in p.get('name', '').lower()]
-                    if not fee_products:
-                        # Extract fees separately
-                        products = self._enhance_email_quote_extraction(products, text, currency)
+        print(f"[Price Agent] Groq/LLM returned {len(products)} products; displaying as-is.", file=sys.stderr, flush=True)
         
-        # AGGRESSIVE VALIDATION: Always check for combined products and split them
-        products = self._validate_and_split_products(products, text, currency)
-        
-        # FILTER OUT INVALID PRODUCTS: Remove products that are actually pricing tiers or other non-product entries
-        products = self._filter_invalid_products(products, text)
-        
-        # FIX PRICING VALUES: Extract correct prices from text if they were incorrectly parsed
-        products = self._fix_pricing_values(products, text, currency)
-        
-        # ENHANCE EMAIL QUOTE EXTRACTION: Better handle conversational/informal quotes (only if we don't have good products)
-        if not products or len(products) == 0 or all(len(p.get('name', '')) > 80 for p in products):
-            products = self._enhance_email_quote_extraction(products, text, currency)
-        
-        # VALIDATION: Check if products were incorrectly extracted
-        product_count_match = re.search(r'(\d+)\s*(?:different\s*)?products?', text.lower())
-        expected_product_count = int(product_count_match.group(1)) if product_count_match else None
-        
-        if expected_product_count and len(products) != expected_product_count:
-            print(f"[Price Agent] WARNING: Expected {expected_product_count} products but got {len(products)}", file=sys.stderr, flush=True)
-            fallback_products = self._smart_fallback_extraction(text, currency)
-            if fallback_products and len(fallback_products) == expected_product_count:
-                products = fallback_products
-        
-        if not products or len(products) == 0:
-            print(f"[Price Agent] WARNING: No products extracted!", file=sys.stderr, flush=True)
-            products = self._smart_fallback_extraction(text, currency)
-        
-        # Convert to legacy format for backward compatibility
+        # Build legacy items and total from Groq output
         items = []
         total_price = 0.0
         
@@ -1491,6 +1156,14 @@ Return ONLY valid JSON. No markdown, no code blocks, no explanatory text. Just t
             "best", "here", "this", "that", "what", "when", "where", "how", "can", "could", "would", "may",
             "might", "good", "on", "re", "following", "dear", "please", "kind", "regards", "per", "as",
         }
+        # Conversational phrases: if name contains these, it's prose/sentence from email, not a product name
+        CONVERSATIONAL_PHRASES = (
+            "we can", "we ship", "we'd probably", "if you need", "if we lock", "on timing", "payment-wise",
+            "most folks", "once we have", "sharpen the pencil", "green light", "business days", "overnight",
+            "good talking", "like i said", "for your folks", "bundle it like", "call it", "roughly",
+            "realistically we can", "get you closer", "normally we", "first batch", "prepay with",
+            "do net once", "cell:", "cell:--", "cell --",
+        )
         # Common stopwords — too many in one "name" => likely a sentence
         STOPWORDS = {
             "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "from",
@@ -1549,6 +1222,10 @@ Return ONLY valid JSON. No markdown, no code blocks, no explanatory text. Just t
             if first in STRUCTURAL_LABELS and len(words) <= 3:
                 continue
             if re.match(r'^[a-z]+\s*:\s*', product_name_lower) and first in STRUCTURAL_LABELS:
+                continue
+            
+            # Conversational prose: name contains email/sentence phrases (e.g. "we can do", "on timing", "payment-wise", "cell:")
+            if any(phrase in product_name_lower for phrase in CONVERSATIONAL_PHRASES):
                 continue
             
             # Pattern-based: pricing tier, delivery time, partial price, incomplete calculation, sentence fragment
