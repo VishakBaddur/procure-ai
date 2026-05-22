@@ -5,6 +5,7 @@ import { API_BASE } from '@/config'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { AlertTriangle, CheckCircle2 } from 'lucide-react'
 import ProjectLayout from './ProjectLayout'
+import SemanticSearch from './SemanticSearch'
 
 const ProjectDashboard = () => {
   const { projectId } = useParams()
@@ -62,6 +63,7 @@ const ProjectDashboard = () => {
             <p className="text-muted-foreground">Overview of your procurement project</p>
           </div>
 
+          <SemanticSearch projectId={projectId} />
           {/* Summary Cards */}
           <div className="grid gap-4 md:grid-cols-3 mb-8">
             <Card>
