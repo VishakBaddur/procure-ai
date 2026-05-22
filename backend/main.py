@@ -16,35 +16,16 @@ from agents.tco_agent import TCOAgent
 from agents.decision_agent import DecisionAgent
 from agents.email_agent import EmailAgent
 
-# Use PostgreSQL adapter if DB_TYPE=postgres, otherwise use SQLite
 import os
-if os.getenv("DB_TYPE", "sqlite").lower() == "postgres":
-    try:
-        from database_postgres import (
-            init_db, 
-            create_project, get_project, get_all_projects, delete_project,
-            add_vendor_to_project, get_project_vendors, delete_vendor, get_vendor_id,
-            add_vendor_document, get_vendor_documents, delete_vendor_document,
-            save_vendor_parsed_data, get_vendor_parsed_data, get_project_all_parsed_data
-        )
-        print("✓ Using PostgreSQL database")
-    except ImportError:
-        print("⚠️ PostgreSQL adapter not available, falling back to SQLite")
-        from database import (
-            init_db, 
-            create_project, get_project, get_all_projects, delete_project,
-            add_vendor_to_project, get_project_vendors, delete_vendor, get_vendor_id,
-            add_vendor_document, get_vendor_documents, delete_vendor_document,
-            save_vendor_parsed_data, get_vendor_parsed_data, get_project_all_parsed_data
-        )
-else:
-    from database import (
-        init_db, 
-        create_project, get_project, get_all_projects, delete_project,
-        add_vendor_to_project, get_project_vendors, delete_vendor, get_vendor_id,
-        add_vendor_document, get_vendor_documents, delete_vendor_document,
-        save_vendor_parsed_data, get_vendor_parsed_data, get_project_all_parsed_data
-    )
+from database import (
+    init_db,
+    create_project, get_project, get_all_projects, delete_project,
+    add_vendor_to_project, get_project_vendors, delete_vendor, get_vendor_id,
+    add_vendor_document, get_vendor_documents, delete_vendor_document,
+    save_vendor_parsed_data, get_vendor_parsed_data, get_project_all_parsed_data,
+    create_user, get_user_by_email, authenticate_user, create_access_token, decode_token
+)
+from agents.embedding_agent import embed_document, semantic_search
 
 # Load environment variables
 try:
@@ -116,7 +97,71 @@ async def os_error_handler(request, exc):
     return JSONResponse(status_code=500, content={"detail": _safe_500_detail(exc)})
 
 
+
+from fastapi import Depends
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+
+def get_current_user(token: str = Depends(oauth2_scheme)) -> Optional[str]:
+    if not token:
+        return None
+    return decode_token(token)
+
+
+class UserRegister(BaseModel):
+    email: str
+    password: str
+    full_name: Optional[str] = ""
+
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+
+@app.post("/api/auth/register")
+def register(body: UserRegister):
+    existing = get_user_by_email(body.email)
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    user = create_user(body.email, body.password, body.full_name or "")
+    token = create_access_token({"sub": user["id"]})
+    return {"access_token": token, "token_type": "bearer", "user": user}
+
+
+@app.post("/api/auth/login")
+def login(body: UserLogin):
+    user = authenticate_user(body.email, body.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    token = create_access_token({"sub": user["id"]})
+    return {"access_token": token, "token_type": "bearer", "user": {"id": user["id"], "email": user["email"], "full_name": user["full_name"]}}
+
+
+@app.get("/api/auth/me")
+def me(current_user: Optional[str] = Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    user = get_user_by_email(current_user)
+    if not user:
+        user = {"id": current_user}
+    return user
+
+
+@app.post("/api/search")
+def semantic_search_endpoint(body: dict, current_user: Optional[str] = Depends(get_current_user)):
+    project_id = body.get("project_id")
+    query = body.get("query")
+    top_k = body.get("top_k", 5)
+    if not project_id or not query:
+        raise HTTPException(status_code=400, detail="project_id and query are required")
+    results = semantic_search(project_id, query, top_k)
+    return {"results": results}
+
+
 # ==================== PROJECT MANAGEMENT ====================
+
 
 class CreateProjectRequest(BaseModel):
     name: str
@@ -338,6 +383,31 @@ async def _process_quote_background(
             result["warranties"] = _extract_warranties_from_quote(result)
         save_vendor_parsed_data(vendor_id, "quote", result, update=True)
         print(f"[Upload Quote] Background parsing completed for {vendor_name}", file=sys.stderr, flush=True)
+        try:
+            docs = get_vendor_documents(vendor_id, "quotation")
+            if docs:
+                latest_doc = docs[0]
+                raw_text = latest_doc.get("text_content") or ""
+                if not raw_text and latest_doc.get("file_path"):
+                    try:
+                        with open(latest_doc["file_path"], "r", errors="ignore") as tf:
+                            raw_text = tf.read()
+                    except Exception:
+                        pass
+                if raw_text:
+                    vendor_info = next((v for v in get_project_vendors_by_id(vendor_id)), None)
+                    from agents.embedding_agent import embed_document
+                    project_id_for_embed = latest_doc.get("project_id", "")
+                    vendors_list = []
+                    import database as _db
+                    with _db.SessionLocal() as _s:
+                        from database import Vendor as _V
+                        v_obj = _s.query(_V).filter(_V.id == vendor_id).first()
+                        if v_obj:
+                            project_id_for_embed = v_obj.project_id
+                    embed_document(latest_doc["id"], vendor_id, project_id_for_embed, raw_text)
+        except Exception as emb_e:
+            print(f"[Upload Quote] Embedding failed (non-fatal): {emb_e}", file=sys.stderr, flush=True)
         if run_research_if_missing and research_agent:
             research_data = get_vendor_parsed_data(vendor_id, "research")
             if not research_data:
