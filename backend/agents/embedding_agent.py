@@ -1,15 +1,8 @@
 import os
 from typing import List, Dict, Any, Optional
-from sentence_transformers import SentenceTransformer
-import database
+import requests
 
-_model = None
-
-def get_model() -> SentenceTransformer:
-    global _model
-    if _model is None:
-        _model = SentenceTransformer("all-MiniLM-L6-v2")
-    return _model
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
 
 def chunk_text(text: str, chunk_size: int = 512, overlap: int = 64) -> List[str]:
@@ -24,24 +17,59 @@ def chunk_text(text: str, chunk_size: int = 512, overlap: int = 64) -> List[str]
     return chunks if chunks else [text]
 
 
+def get_embeddings(texts: List[str]) -> List[List[float]]:
+    """Get embeddings using Groq API (nomic-embed-text-v1.5, 768 dims)."""
+    if not GROQ_API_KEY:
+        raise ValueError("GROQ_API_KEY not set")
+    
+    embeddings = []
+    # Groq embedding API processes one at a time
+    for text in texts:
+        response = requests.post(
+            "https://api.groq.com/openai/v1/embeddings",
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "nomic-embed-text-v1.5",
+                "input": text
+            },
+            timeout=30
+        )
+        response.raise_for_status()
+        embeddings.append(response.json()["data"][0]["embedding"])
+    
+    return embeddings
+
+
+import database
+
 def embed_document(document_id: int, vendor_id: int, project_id: str, text: str):
     """Chunk, embed, and store a document in pgvector."""
     if not text or not text.strip():
         return
-    model = get_model()
     chunks = chunk_text(text)
-    embeddings = model.encode(chunks, show_progress_bar=False).tolist()
-    database.store_document_embeddings(document_id, vendor_id, project_id, chunks, embeddings)
-    print(f"Embedded {len(chunks)} chunks for document {document_id}")
+    try:
+        embeddings = get_embeddings(chunks)
+        database.store_document_embeddings(document_id, vendor_id, project_id, chunks, embeddings)
+        print(f"Embedded {len(chunks)} chunks for document {document_id}")
+    except Exception as e:
+        print(f"Embedding failed for document {document_id}: {e}")
 
 
 def semantic_search(project_id: str, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
     """Search across all vendor documents in a project using cosine similarity."""
-    model = get_model()
-    query_embedding = model.encode([query], show_progress_bar=False)[0].tolist()
+    try:
+        query_embedding = get_embeddings([query])[0]
+    except Exception as e:
+        print(f"Failed to embed query: {e}")
+        return []
+    
     results = database.semantic_search(project_id, query_embedding, top_k)
     db_vendors = database.get_project_vendors(project_id)
     vendor_map = {v["id"]: v["vendor_name"] for v in db_vendors}
     for r in results:
         r["vendor_name"] = vendor_map.get(r["vendor_id"], "Unknown")
+    
     return results

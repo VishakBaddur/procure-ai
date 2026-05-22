@@ -88,7 +88,7 @@ class DocumentEmbedding(Base):
     project_id = Column(String, nullable=False)
     chunk_index = Column(Integer, default=0)
     chunk_text = Column(Text, nullable=False)
-    embedding = Column(Vector(384))
+    embedding = Column(Vector(768))
     created_at = Column(DateTime, default=datetime.utcnow)
     document = relationship("VendorDocument", back_populates="embeddings")
 
