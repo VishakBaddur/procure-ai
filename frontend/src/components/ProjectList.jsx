@@ -4,7 +4,8 @@ import axios from 'axios'
 import { API_BASE } from '@/config'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, LogOut } from 'lucide-react'
+import { useAuth } from '@/AuthContext'
 import {
   Dialog,
   DialogContent,
@@ -15,6 +16,7 @@ import {
 } from './ui/dialog'
 
 const ProjectList = () => {
+  const { user, logout } = useAuth()
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -79,12 +81,18 @@ const ProjectList = () => {
             <h1 className="text-4xl font-bold tracking-tight mb-2">Projects</h1>
             <p className="text-muted-foreground">Manage your procurement projects</p>
           </div>
-          <Link to="/projects/create">
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              New Project
+          <div className="flex items-center gap-3">
+            {user && <span className="text-sm text-muted-foreground">{user.email}</span>}
+            <Link to="/projects/create">
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                New Project
+              </Button>
+            </Link>
+            <Button variant="outline" size="icon" onClick={logout} title="Sign out">
+              <LogOut className="h-4 w-4" />
             </Button>
-          </Link>
+          </div>
         </div>
 
         {error && (
