@@ -1,33 +1,36 @@
 # Procure AI
 
-A comprehensive AI-powered procurement platform for procurement officers to manage vendors, compare quotes, analyze legal agreements, research vendor reputation, and calculate Total Cost of Ownership (TCO) — organized around **Projects** for multi-vendor, multi-document workflows.
+An AI-powered procurement intelligence platform for procurement officers to manage vendors, compare quotes, analyze legal agreements, research vendor reputation, and calculate Total Cost of Ownership — organized around **Projects** for multi-vendor, multi-document workflows.
+
+Live demo: https://procure-ai-byk5.onrender.com
 
 ---
 
 ## Features
 
-### 🤖 AI Agents
+### AI Agents
 
-- **Price Comparison Agent** — Extracts and compares pricing from vendor quotes (PDF, images, text)
+- **Price Comparison Agent** — Extracts and compares pricing from vendor quotes (PDF, image, text)
 - **Legal Analysis Agent** — Analyzes vendor agreements for risks, terms, and recommendations
-- **Vendor Research Agent** — Researches vendors for reviews, reputation scores, and red flags using Groq AI
-- **TCO Agent** — Calculates Total Cost of Ownership including support, maintenance, and long-term costs
-- **Decision Agent** — Generates final vendor recommendations based on all collected data
+- **Vendor Research Agent** — Reputation scoring, red flag detection, sourced recommendations via Groq AI
+- **TCO Agent** — 5-year Total Cost of Ownership projections including hidden costs
+- **Decision Agent** — Final vendor recommendation with reasoning across all collected signals
 - **Email Agent** — Fetches and processes vendor quotes directly from email (IMAP/POP)
+- **Embedding Agent** — Chunks and embeds all vendor documents using Groq nomic-embed-text-v1.5 (768d)
 
-### 📊 Core Features
+### Core Features
 
-- **Project-based workflow** — All procurement activity is organized under Projects; each project tracks multiple vendors
-- **Vendor management** — Add, remove, and track vendors per project
-- **Quote uploads** — Upload vendor quotations (PDF, image, text) per vendor; AI extracts and structures pricing
-- **Agreement uploads** — Upload legal agreements per vendor; AI scores risk and surfaces key terms
-- **Vendor research** — AI-powered reputation scoring, red flag detection, and sourced recommendations
-- **TCO analysis** — 5-year cost projections including hidden costs (support, maintenance, training)
+- **Project-based workflow** — All procurement activity organized under Projects; each project tracks multiple vendors
+- **JWT authentication** — Secure register/login with bcrypt password hashing and 7-day tokens
+- **Semantic search** — Natural language search across all vendor documents using pgvector cosine similarity with HNSW index
+- **Auto-embedding** — Every uploaded document is automatically chunked and embedded in the background
+- **Quote uploads** — PDF, image, text per vendor; AI extracts and structures pricing
+- **Agreement uploads** — Legal agreements per vendor; AI scores risk and surfaces key terms
+- **TCO analysis** — 5-year cost projections
 - **What-if analysis** — Model cost scenarios with adjustable assumptions
-- **Decision assistance** — Final AI-generated vendor recommendation with reasoning
+- **Decision assistance** — AI-generated final vendor recommendation
 - **Analytics dashboard** — Side-by-side comparisons across quotes, agreements, reviews, and TCO
-- **Export** — Export procurement recommendations as structured reports
-- **Email integration** *(optional)* — Connect an IMAP/POP mailbox to auto-fetch vendor quotes
+- **Email integration** (optional) — Connect IMAP/POP mailbox to auto-fetch vendor quotes
 
 ---
 
@@ -35,22 +38,51 @@ A comprehensive AI-powered procurement platform for procurement officers to mana
 
 ### Backend
 - **FastAPI** — Python web framework
-- **SQLite** — Local database (`procurement.db`) via SQLAlchemy ORM
+- **PostgreSQL** — Production database via SQLAlchemy ORM
+- **pgvector** — Vector similarity search extension (HNSW index, cosine distance)
+- **Groq AI** — Primary LLM for all agents + nomic-embed-text-v1.5 embeddings
 - **pdfplumber** — PDF text extraction
 - **pytesseract + Pillow** — OCR for image-based quotes
 - **python-docx** — Word document support
-- **Groq AI** — Primary LLM for all agents (fast inference via `groq` SDK)
-- **Google Generative AI** — Optional fallback / vendor research enrichment
+- **JWT (python-jose + bcrypt)** — Authentication
 - **python-dotenv** — Environment variable management
 
 ### Frontend
 - **React 18** — UI framework
 - **Vite** — Build tool
-- **React Router v6** — Navigation
+- **React Router v6** — Navigation with protected routes
 - **Recharts** — Data visualization
 - **Tailwind CSS** — Styling
-- **Radix UI** — Accessible component primitives (Dialog, Tabs, Select, etc.)
+- **Radix UI** — Accessible component primitives
 - **Lucide React** — Icons
+
+### Infrastructure
+- **Render** — Backend + frontend deployment (single Docker container)
+- **Render PostgreSQL** — Managed PostgreSQL with pgvector
+
+---
+
+## Architecture
+
+    User → React Frontend (Vite/Tailwind)
+              ↓ JWT-authenticated requests
+    FastAPI Backend
+              ↓
+    ┌─────────────────────────────────────┐
+    │  Agents (Groq AI)                   │
+    │  - Price Comparison                 │
+    │  - Legal Analysis                   │
+    │  - Vendor Research                  │
+    │  - TCO                              │
+    │  - Decision                         │
+    │  - Embedding (nomic-embed-text)     │
+    └─────────────────────────────────────┘
+              ↓
+    PostgreSQL + pgvector
+    - Projects / Vendors / Documents
+    - Parsed data (JSON)
+    - Document embeddings (768d, HNSW index)
+    - Users (bcrypt hashed)
 
 ---
 
@@ -64,15 +96,18 @@ A comprehensive AI-powered procurement platform for procurement officers to mana
     │   │   ├── vendor_research_agent.py
     │   │   ├── tco_agent.py
     │   │   ├── decision_agent.py
-    │   │   └── email_agent.py
-    │   ├── database.py
-    │   ├── main.py
+    │   │   ├── email_agent.py
+    │   │   └── embedding_agent.py
+    │   ├── database.py          # SQLAlchemy ORM + pgvector + auth helpers
+    │   ├── main.py              # FastAPI app, all endpoints
     │   ├── models.py
     │   ├── requirements.txt
     │   └── uploads/
     ├── frontend/
     │   ├── src/
     │   │   ├── components/
+    │   │   │   ├── AuthPage.jsx
+    │   │   │   ├── SemanticSearch.jsx
     │   │   │   ├── ProjectList.jsx
     │   │   │   ├── CreateProject.jsx
     │   │   │   ├── ProjectDashboard.jsx
@@ -85,9 +120,9 @@ A comprehensive AI-powered procurement platform for procurement officers to mana
     │   │   │   ├── AgreementsComparison.jsx
     │   │   │   ├── ReviewsComparison.jsx
     │   │   │   ├── TCOComparison.jsx
-    │   │   │   ├── Analytics.jsx
     │   │   │   ├── DecisionAssistance.jsx
     │   │   │   └── WhatIfAnalysis.jsx
+    │   │   ├── AuthContext.jsx
     │   │   ├── config.js
     │   │   ├── App.jsx
     │   │   └── main.jsx
@@ -107,76 +142,65 @@ A comprehensive AI-powered procurement platform for procurement officers to mana
 
 - Python 3.8+
 - Node.js 16+
-- Tesseract OCR (for image-based quote extraction)
+- PostgreSQL 14+ with pgvector extension
 - Groq API Key — free at https://console.groq.com
+
+### Install pgvector (macOS)
+
+    git clone --branch v0.8.2 https://github.com/pgvector/pgvector.git /tmp/pgvector
+    cd /tmp/pgvector
+    make PG_CONFIG=/opt/homebrew/opt/postgresql@14/bin/pg_config
+    make install PG_CONFIG=/opt/homebrew/opt/postgresql@14/bin/pg_config
 
 ### Backend Setup
 
-1. Navigate to the backend directory and activate the virtual environment:
+    cd backend
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install -r requirements.txt
 
-        cd backend
-        source venv/bin/activate
+Create a .env file in backend/:
 
-2. Install dependencies:
+    GROQ_API_KEY=your_groq_api_key_here
+    DATABASE_URL=postgresql://localhost/procureai
+    SECRET_KEY=your_random_secret_key
 
-        pip install -r requirements.txt
+    # Optional
+    GEMINI_API_KEY=your_gemini_api_key
+    SERPAPI_KEY=your_serpapi_key
+    EMAIL_ADDRESS=your_email@example.com
+    EMAIL_PASSWORD=your_password
+    EMAIL_IMAP_SERVER=imap.gmail.com
 
-3. Install Tesseract OCR:
-   - macOS: `brew install tesseract`
-   - Ubuntu: `sudo apt-get install tesseract-ocr`
-   - Windows: https://github.com/UB-Mannheim/tesseract/wiki
+Start the backend:
 
-4. Create a `.env` file in the `backend/` directory:
+    python3 main.py
 
-        GROQ_API_KEY=your_groq_api_key_here
-
-        # Optional: Google Gemini for additional vendor research enrichment
-        GEMINI_API_KEY=your_gemini_api_key_here
-
-        # Optional: SerpAPI for web search grounding
-        SERPAPI_KEY=your_serpapi_key_here
-
-        # Optional: Email integration
-        EMAIL_ADDRESS=your_email@example.com
-        EMAIL_PASSWORD=your_password
-        EMAIL_IMAP_SERVER=imap.gmail.com
-
-5. Start the backend:
-
-        python3 main.py
-
-   API available at http://localhost:8000
+API available at http://localhost:8000
 
 ### Frontend Setup
 
-1. Navigate to the frontend directory:
+    cd frontend
+    npm install
+    npm run dev
 
-        cd frontend
-
-2. Install dependencies and start the dev server:
-
-        npm install
-        npm run dev
-
-   Frontend available at http://localhost:3000
-
----
-
-## Usage
-
-1. **Create a Project** — Start by creating a procurement project (e.g. "Office Laptops Q3")
-2. **Add Vendors** — Add the vendors you are evaluating to the project
-3. **Upload Quotes** — Upload quotation documents (PDF, image, or text) per vendor
-4. **Upload Agreements** — Upload legal agreements per vendor for risk analysis
-5. **Research Vendors** — Trigger AI-powered vendor research for reputation scores and red flags
-6. **View Comparisons** — Compare quotes, agreements, reviews, and TCO side by side
-7. **What-If Analysis** — Model different cost scenarios with adjustable parameters
-8. **Get Recommendation** — Let the Decision Agent generate a final vendor recommendation
-9. **Export** — Export the recommendation report
+Frontend available at http://localhost:3000
 
 ---
 
 ## API Endpoints
+
+### Auth
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | /api/auth/register | Register a new user |
+| POST | /api/auth/login | Login and get JWT token |
+| GET | /api/auth/me | Get current user |
+
+### Search
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | /api/search | Semantic search across vendor documents |
 
 ### Projects
 | Method | Endpoint | Description |
@@ -185,7 +209,7 @@ A comprehensive AI-powered procurement platform for procurement officers to mana
 | GET | /api/projects | List all projects |
 | GET | /api/projects/{project_id} | Get project details |
 | DELETE | /api/projects/{project_id} | Delete a project |
-| GET | /api/projects/{project_id}/dashboard | Get project dashboard data |
+| GET | /api/projects/{project_id}/dashboard | Get project dashboard |
 
 ### Vendors
 | Method | Endpoint | Description |
@@ -198,8 +222,6 @@ A comprehensive AI-powered procurement platform for procurement officers to mana
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | /api/projects/{project_id}/vendors/{vendor_id}/quotations | Upload a quote |
-| GET | /api/projects/{project_id}/vendors/{vendor_id}/quotations | List quotes |
-| DELETE | /api/projects/{project_id}/vendors/{vendor_id}/quotations/{doc_id} | Delete a quote |
 | GET | /api/projects/{project_id}/quotations/comparison | Compare all quotes |
 | POST | /api/projects/{project_id}/vendors/{vendor_id}/agreements | Upload an agreement |
 | GET | /api/projects/{project_id}/agreements/comparison | Compare all agreements |
@@ -222,34 +244,40 @@ A comprehensive AI-powered procurement platform for procurement officers to mana
 
 ---
 
-## AI Configuration
+## Semantic Search
 
-The platform uses **Groq AI** as the primary LLM for all agents. Groq provides fast inference and a generous free tier.
+Every uploaded vendor document is automatically chunked (512-word chunks, 64-word overlap) and embedded using Groq's nomic-embed-text-v1.5 model (768 dimensions). Embeddings are stored in PostgreSQL via pgvector with an HNSW index (m=16, ef_construction=64) for sub-millisecond cosine similarity search at scale.
 
-- If Groq is unavailable, the system checks for a local **Ollama** instance at `localhost:11434` as a fallback
-- **Google Gemini** (`GEMINI_API_KEY`) can be added for additional vendor research enrichment
-- **SerpAPI** (`SERPAPI_KEY`) can be added for real-time web search grounding in vendor research
+Query examples:
 
-Get your free Groq API key at https://console.groq.com
+- "vendors with overage fees"
+- "warranty terms longer than 12 months"
+- "SLA penalties for downtime"
+- "net payment terms"
+- "auto-renewal clauses"
 
 ---
 
-## Docker
+## Deployment
 
-A `docker-compose.yml` is included for containerized deployment:
+Deployed on Render as a single Docker container (frontend + backend).
 
-    docker-compose up --build
+Environment variables required on Render:
+
+    DATABASE_URL=<render-internal-postgres-url>
+    SECRET_KEY=<random-hex-string>
+    GROQ_API_KEY=<your-groq-key>
+    SERPAPI_KEY=<your-serpapi-key>  # optional
 
 ---
 
 ## Future Enhancements
 
-- PostgreSQL support for production deployments (migration script included: `migrate_to_postgres.py`)
-- Multi-user support with authentication
-- Advanced ML-based scoring models
-- Deeper email integration (auto-polling, threading)
-- Mobile-responsive UI improvements
+- Multi-organization support with role-based access control
 - Expanded export formats (PDF reports, Excel)
+- Email auto-polling with threading
+- Mobile-responsive UI improvements
+- Confidence scoring on extracted fields with human review queue
 
 ---
 
