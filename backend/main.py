@@ -428,6 +428,11 @@ async def _run_vendor_research_background(vendor_id: int, vendor_name: str):
         return
     import sys
     try:
+        # Skip if research data already exists (e.g. seeded demo data)
+        existing = get_vendor_parsed_data(vendor_id, "research")
+        if existing and existing[0].get("data", {}).get("reputation_score", 0) > 0:
+            print(f"[Add Vendor] Research already exists for {vendor_name}, skipping", file=sys.stderr, flush=True)
+            return
         print(f"[Add Vendor] Background research started for {vendor_name}", file=sys.stderr, flush=True)
         research_result = await research_agent.research_vendor(vendor_name)
         save_vendor_parsed_data(vendor_id, "research", research_result, update=True)
