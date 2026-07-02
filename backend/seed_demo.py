@@ -141,7 +141,7 @@ legal = {
         "risk_score": 4.8,
         "risk_level": "Medium",
         "key_terms": [
-            {"term": "Limitation of Liability", "detail": "Capped at 50% of contract value — below industry standard.", "risk": "high"},
+            {"term": "Limitation of Liability", "detail": "Capped at 50% of contract value: below industry standard.", "risk": "high"},
             {"term": "Intellectual property", "detail": "Lenovo retains rights to any customizations. Unusual clause.", "risk": "high"},
             {"term": "Force majeure", "detail": "Broad definition includes supply chain disruptions with no compensation.", "risk": "medium"},
             {"term": "Governing law", "detail": "Hong Kong SAR. May complicate dispute resolution.", "risk": "medium"},
@@ -165,7 +165,7 @@ legal = {
             {"term": "Termination", "detail": "30-day termination for convenience with pro-rated refund.", "risk": "low"},
         ],
         "recommendations": [
-            "Agreement is favorable — minimal negotiation needed",
+            "Agreement is favorable: minimal negotiation needed",
             "Confirm Wolf Security license terms for your jurisdiction",
             "Request quarterly SLA reporting commitment in writing"
         ],
@@ -217,13 +217,13 @@ research = {
         "vendor_name": "HP Inc",
         "reputation_score": 7.9,
         "overall_sentiment": "positive",
-        "summary": "HP EliteBooks well regarded in enterprise. Wolf Security suite is a differentiator for security-conscious buyers. Care Pack support receives mixed reviews — on-site response can be slow in some regions.",
+        "summary": "HP EliteBooks well regarded in enterprise. Wolf Security suite is a differentiator for security-conscious buyers. Care Pack support receives mixed reviews: on-site response can be slow in some regions.",
         "red_flags": [
             "Care Pack support quality varies significantly by region"
         ],
         "positive_signals": [
             "Wolf Security rated best-in-class for endpoint protection (IDC 2024)",
-            "Strong sustainability credentials — 100% recycled ocean-bound plastic in packaging",
+            "Strong sustainability credentials: 100% recycled ocean-bound plastic in packaging",
             "HP Amplify partner program provides dedicated account support"
         ],
         "sources": ["IDC Report 2024", "Gartner Peer Insights", "G2"],

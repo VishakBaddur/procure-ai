@@ -74,7 +74,7 @@ const ReviewsComparison = () => {
 
         {error && (
           <div className={`mb-6 p-4 rounded-md text-sm ${isSerpAPIUnavailable(error) ? 'border border-muted-foreground/30 bg-muted/30 text-muted-foreground' : 'border border-destructive bg-destructive/10 text-destructive'}`}>
-            {isSerpAPIUnavailable(error) ? 'Vendor research unavailable — add SerpAPI key to enable' : error}
+            {isSerpAPIUnavailable(error) ? 'Vendor research unavailable: add SerpAPI key to enable' : error}
           </div>
         )}
 
@@ -168,7 +168,7 @@ const ReviewsComparison = () => {
                         
                         {vendor.research_unavailable ? (
                           <div className="text-sm text-muted-foreground p-3 border border-muted-foreground/20 rounded-lg bg-muted/20">
-                            {vendor.research_unavailable_message || 'Vendor research unavailable — add SerpAPI key to enable'}
+                            {vendor.research_unavailable_message || 'Vendor research unavailable: add SerpAPI key to enable'}
                           </div>
                         ) : vendor.reviews && vendor.reviews.length > 0 ? (
                           <div>
@@ -304,7 +304,7 @@ const ReviewsComparison = () => {
             {error && (
               <CardContent>
                 <p className={`text-sm ${isSerpAPIUnavailable(error) ? 'text-muted-foreground' : 'text-destructive'}`}>
-                  {isSerpAPIUnavailable(error) ? 'Vendor research unavailable — add SerpAPI key to enable' : error}
+                  {isSerpAPIUnavailable(error) ? 'Vendor research unavailable: add SerpAPI key to enable' : error}
                 </p>
               </CardContent>
             )}

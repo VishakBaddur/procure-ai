@@ -383,7 +383,7 @@ class VendorResearchAgent:
                 "source": "Google Reviews",
                 "rating": None,
                 "review_count": None,
-                "summary": "Vendor research unavailable — add SerpAPI key to enable" if research_unavailable else f"Search performed: {error_msg}",
+                "summary": "Vendor research unavailable: add SerpAPI key to enable" if research_unavailable else f"Search performed: {error_msg}",
                 "recent_reviews": [],
                 "url": f"https://www.google.com/search?q={quote_plus(vendor_name + ' reviews')}"
             })
@@ -429,7 +429,7 @@ class VendorResearchAgent:
             "reviews": reviews,
             "red_flags": red_flags,
             "research_unavailable": research_unavailable,
-            "research_unavailable_message": "Vendor research unavailable — add SerpAPI key to enable" if research_unavailable else None,
+            "research_unavailable_message": "Vendor research unavailable: add SerpAPI key to enable" if research_unavailable else None,
             "business_info": {
                 "location": google_reviews_data.get("location", "Not specified"),
                 "years_in_business": "Not specified",

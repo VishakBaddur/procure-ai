@@ -85,7 +85,7 @@ def _safe_500_detail(exc: Exception) -> str:
     """Never send 'Broken pipe' or raw OSError to the client."""
     msg = str(exc)
     if isinstance(exc, OSError) or "Broken pipe" in msg or "Errno 32" in msg or "Connection reset" in msg:
-        return "Connection was closed or a temporary error occurred. Your action may still have been saved — please refresh the page."
+        return "Connection was closed or a temporary error occurred. Your action may still have been saved. Please refresh the page."
     return msg
 
 
@@ -526,7 +526,7 @@ async def upload_quotation(
         return {
             "success": True,
             "document_id": int(doc_id) if doc_id is not None else None,
-            "message": "Quote uploaded. Extracting pricing — refresh in a few seconds to see results.",
+            "message": "Quote uploaded. Extracting pricing. Refresh in a few seconds to see results.",
         }
     except HTTPException:
         raise
@@ -534,7 +534,7 @@ async def upload_quotation(
         if "Broken pipe" in str(e) or e.errno == 32:
             raise HTTPException(
                 status_code=500,
-                detail="Connection closed before the server could respond. Your quote may still have been uploaded — please refresh the page to check.",
+                detail="Connection closed before the server could respond. Your quote may still have been uploaded. Please refresh the page to check.",
             )
         raise HTTPException(status_code=500, detail=_safe_500_detail(e))
     except Exception as e:

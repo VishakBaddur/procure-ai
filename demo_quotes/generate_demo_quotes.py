@@ -17,7 +17,7 @@ def _header(c: canvas.Canvas, title: str, vendor_name: str):
 
 def _footer(c: canvas.Canvas):
     c.setFont("Helvetica-Oblique", 8)
-    c.drawString(1 * inch, 0.75 * inch, "Generated demo quote for testing only – not a real offer.")
+    c.drawString(1 * inch, 0.75 * inch, "Generated demo quote for testing only: not a real offer.")
 
 
 def vendor1_safetypro(path: Path):
@@ -89,7 +89,7 @@ def vendor1_safetypro(path: Path):
     c.setFont("Helvetica", 9)
     c.drawString(1 * inch, y, "• Payment: Net 30 days from invoice date (subject to credit approval).")
     y -= 0.18 * inch
-    c.drawString(1 * inch, y, "• Delivery: 10–12 business days ARO to MidCity Manufacturing (Chicago, IL).")
+    c.drawString(1 * inch, y, "• Delivery: 10-12 business days ARO to MidCity Manufacturing (Chicago, IL).")
     y -= 0.18 * inch
     c.drawString(1 * inch, y, "• Warranty: 2 years against manufacturing defects on all items listed.")
     y -= 0.18 * inch
@@ -115,7 +115,7 @@ def vendor2_globalshield(path: Path):
 
     y = 9.6 * inch
     c.setFont("Helvetica", 9)
-    c.drawString(1 * inch, y, "Customer: MidCity Mfg  – Attn: Purchasing")
+    c.drawString(1 * inch, y, "Customer: MidCity Mfg : Attn: Purchasing")
     y -= 0.25 * inch
     c.drawString(1 * inch, y, "RE: Safety Gear Bundle (Goggles / Helmets / Hi-Vis)")
 
@@ -134,7 +134,7 @@ def vendor2_globalshield(path: Path):
         ("GS-HELM-BASIC", "Hard Hat BASIC (Type I, white)", "480*", "$22.75", "$10,920.00"),
         ("", "*includes 20 spare units, see Note A", "", "", ""),
         ("GS-VEST-HV", "Hi-Vis Vest (approx. Class 2 equiv.)", "500", "$16.10", "$8,050.00"),
-        ("SHIP-HNDL", "Shipping/Handling – see Section 3", "1", "TBD", "TBD"),
+        ("SHIP-HNDL", "Shipping/Handling: see Section 3", "1", "TBD", "TBD"),
     ]
 
     for code, desc, qty, unit, total in lines:
@@ -163,7 +163,7 @@ def vendor2_globalshield(path: Path):
     # Hidden fees section further down
     y -= 0.45 * inch
     c.setFont("Helvetica-Bold", 9)
-    c.drawString(1 * inch, y, "Section 3 – Additional Charges (may apply)")
+    c.drawString(1 * inch, y, "Section 3: Additional Charges (may apply)")
     y -= 0.2 * inch
     c.setFont("Helvetica", 8)
     c.drawString(1 * inch, y, "- Palletization / custom labeling: $475 flat per shipment.")
@@ -182,7 +182,7 @@ def vendor2_globalshield(path: Path):
     c.setFont("Helvetica", 8)
     c.drawString(1 * inch, y, "• Payment: 50% upfront to release production slot; balance due prior to shipment.")
     y -= 0.16 * inch
-    c.drawString(1 * inch, y, "• Delivery: Typically 7–14 business days after funds clear (subject to inventory).")
+    c.drawString(1 * inch, y, "• Delivery: Typically 7-14 business days after funds clear (subject to inventory).")
     y -= 0.16 * inch
     c.drawString(1 * inch, y, "• Exact freight and surcharges to be confirmed at time of dispatch (see Section 3).")
 
@@ -223,7 +223,7 @@ def vendor3_quicksafe(path: Path):
         "if we lock it in this month. Realistically we can probably get you closer to the low-mid 20s",
         "once I see exactly what SKUs you’re okay with.",
         "",
-        "On timing: normally we ship in 5–7 business days once we have the green light.",
+        "On timing: normally we ship in 5-7 business days once we have the green light.",
         "Delivery terms are usually standard ground, prepaid & add (we’ll tack it onto the invoice)",
         "but if you need it faster we can overnight or 2-day the first batch.",
         "",

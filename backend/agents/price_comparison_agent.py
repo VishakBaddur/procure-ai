@@ -99,7 +99,7 @@ class PriceComparisonAgent:
                     except Exception:
                         extracted_text = ""
         except Exception as e:
-            # Hard failure during extraction – return a clear, user-facing error
+            # Hard failure during extraction - return a clear, user-facing error
             base_result["success"] = False
             base_result["error"] = (
                 "We couldn't read this file reliably. "
@@ -345,7 +345,7 @@ class PriceComparisonAgent:
             print(f"[Price Agent] Processing quote for {vendor_name}, text length: {len(text)}", file=sys.stderr, flush=True)
             print(f"[Price Agent] First 500 chars: {text[:500]}", file=sys.stderr, flush=True)
             
-            # Use local LLM (Ollama) or Groq for extraction — same prompt for both
+            # Use local LLM (Ollama) or Groq for extraction - same prompt for both
             if self.use_local_llm:
                 print(f"[QuoteParse] EXTRACTION_LLM=Ollama", file=sys.stderr, flush=True)
                 return await self._parse_with_local_llm(text, vendor_name, prompt)
@@ -355,7 +355,7 @@ class PriceComparisonAgent:
             # Use a more capable model for complex extraction
             system_message = """You are the sole extractor for vendor quotes. Return ONLY real product/service line items with prices. The app will show exactly what you return.
 
-RULES: (1) Product "name" = short name only (e.g. "Basic wrap goggles", "Hard hats"). Never use a sentence, greeting, or contact line (Cell, Phone) as a product name. (2) Include ONLY actual goods/services being sold with a price—never Subtotal, Total, Freight, or sentences about timing/shipping/payment. (3) One product per item; pricing tiers go in pricing_matrix. (4) Use "Not specified" for any missing field. Return only valid JSON."""
+RULES: (1) Product "name" = short name only (e.g. "Basic wrap goggles", "Hard hats"). Never use a sentence, greeting, or contact line (Cell, Phone) as a product name. (2) Include ONLY actual goods/services being sold with a price - never Subtotal, Total, Freight, or sentences about timing/shipping/payment. (3) One product per item; pricing tiers go in pricing_matrix. (4) Use "Not specified" for any missing field. Return only valid JSON."""
             
             response = self.client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
@@ -1181,7 +1181,7 @@ RULES: (1) Product "name" = short name only (e.g. "Basic wrap goggles", "Hard ha
             "note", "section", "item", "description", "qty", "price", "cell", "phone", "fax", "handling",
             "surcharge", "fee", "charges", "shipping", "certification", "merchandise", "estimated",
         }
-        # Sentence starters — line starting with these is likely prose, not a product (exclude "the"/"a" so "The Office Suite" etc. pass)
+        # Sentence starters - line starting with these is likely prose, not a product (exclude "the"/"a" so "The Office Suite" etc. pass)
         SENTENCE_STARTERS = {
             "i", "we", "you", "he", "she", "it", "they", "hi", "hello", "so", "if", "let", "thanks", "thank",
             "best", "here", "this", "that", "what", "when", "where", "how", "can", "could", "would", "may",
@@ -1195,7 +1195,7 @@ RULES: (1) Product "name" = short name only (e.g. "Basic wrap goggles", "Hard ha
             "realistically we can", "get you closer", "normally we", "first batch", "prepay with",
             "do net once", "cell:", "cell:--", "cell --",
         )
-        # Common stopwords — too many in one "name" => likely a sentence
+        # Common stopwords - too many in one "name" => likely a sentence
         STOPWORDS = {
             "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "from",
             "as", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did",
@@ -1225,7 +1225,7 @@ RULES: (1) Product "name" = short name only (e.g. "Basic wrap goggles", "Hard ha
             if pricing_matrix and not has_positive_price:
                 continue
             
-            # Length: must look like a product name (2–100 chars)
+            # Length: must look like a product name (2-100 chars)
             if len(product_name) < 2 or len(product_name) > 100:
                 continue
             

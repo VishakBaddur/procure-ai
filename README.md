@@ -1,6 +1,6 @@
 # Procure AI
 
-An AI-powered procurement intelligence platform for procurement officers to manage vendors, compare quotes, analyze legal agreements, research vendor reputation, and calculate Total Cost of Ownership — organized around **Projects** for multi-vendor, multi-document workflows.
+An AI-powered procurement intelligence platform for procurement officers to manage vendors, compare quotes, analyze legal agreements, research vendor reputation, and calculate Total Cost of Ownership: organized around **Projects** for multi-vendor, multi-document workflows.
 
 Live demo: https://procure-ai-byk5.onrender.com
 
@@ -10,55 +10,55 @@ Live demo: https://procure-ai-byk5.onrender.com
 
 ### AI Agents
 
-- **Price Comparison Agent** — Extracts and compares pricing from vendor quotes (PDF, image, text)
-- **Legal Analysis Agent** — Analyzes vendor agreements for risks, terms, and recommendations
-- **Vendor Research Agent** — Reputation scoring, red flag detection, sourced recommendations via Groq AI
-- **TCO Agent** — 5-year Total Cost of Ownership projections including hidden costs
-- **Decision Agent** — Final vendor recommendation with reasoning across all collected signals
-- **Email Agent** — Fetches and processes vendor quotes directly from email (IMAP/POP)
-- **Embedding Agent** — Chunks and embeds all vendor documents using Groq nomic-embed-text-v1.5 (768d)
+- **Price Comparison Agent**: Extracts and compares pricing from vendor quotes (PDF, image, text)
+- **Legal Analysis Agent**: Analyzes vendor agreements for risks, terms, and recommendations
+- **Vendor Research Agent**: Reputation scoring, red flag detection, sourced recommendations via Groq AI
+- **TCO Agent**: 5-year Total Cost of Ownership projections including hidden costs
+- **Decision Agent**: Final vendor recommendation with reasoning across all collected signals
+- **Email Agent**: Fetches and processes vendor quotes directly from email (IMAP/POP)
+- **Embedding Agent**: Chunks and embeds all vendor documents using Groq nomic-embed-text-v1.5 (768d)
 
 ### Core Features
 
-- **Project-based workflow** — All procurement activity organized under Projects; each project tracks multiple vendors
-- **JWT authentication** — Secure register/login with bcrypt password hashing and 7-day tokens
-- **Semantic search** — Natural language search across all vendor documents using pgvector cosine similarity with HNSW index
-- **Auto-embedding** — Every uploaded document is automatically chunked and embedded in the background
-- **Quote uploads** — PDF, image, text per vendor; AI extracts and structures pricing
-- **Agreement uploads** — Legal agreements per vendor; AI scores risk and surfaces key terms
-- **TCO analysis** — 5-year cost projections
-- **What-if analysis** — Model cost scenarios with adjustable assumptions
-- **Decision assistance** — AI-generated final vendor recommendation
-- **Analytics dashboard** — Side-by-side comparisons across quotes, agreements, reviews, and TCO
-- **Email integration** (optional) — Connect IMAP/POP mailbox to auto-fetch vendor quotes
+- **Project-based workflow**: All procurement activity organized under Projects; each project tracks multiple vendors
+- **JWT authentication**: Secure register/login with bcrypt password hashing and 7-day tokens
+- **Semantic search**: Natural language search across all vendor documents using pgvector cosine similarity with HNSW index
+- **Auto-embedding**: Every uploaded document is automatically chunked and embedded in the background
+- **Quote uploads**: PDF, image, text per vendor; AI extracts and structures pricing
+- **Agreement uploads**: Legal agreements per vendor; AI scores risk and surfaces key terms
+- **TCO analysis**: 5-year cost projections
+- **What-if analysis**: Model cost scenarios with adjustable assumptions
+- **Decision assistance**: AI-generated final vendor recommendation
+- **Analytics dashboard**: Side-by-side comparisons across quotes, agreements, reviews, and TCO
+- **Email integration** (optional): Connect IMAP/POP mailbox to auto-fetch vendor quotes
 
 ---
 
 ## Tech Stack
 
 ### Backend
-- **FastAPI** — Python web framework
-- **PostgreSQL** — Production database via SQLAlchemy ORM
-- **pgvector** — Vector similarity search extension (HNSW index, cosine distance)
-- **Groq AI** — Primary LLM for all agents + nomic-embed-text-v1.5 embeddings
-- **pdfplumber** — PDF text extraction
-- **pytesseract + Pillow** — OCR for image-based quotes
-- **python-docx** — Word document support
-- **JWT (python-jose + bcrypt)** — Authentication
-- **python-dotenv** — Environment variable management
+- **FastAPI**: Python web framework
+- **PostgreSQL**: Production database via SQLAlchemy ORM
+- **pgvector**: Vector similarity search extension (HNSW index, cosine distance)
+- **Groq AI**: Primary LLM for all agents + nomic-embed-text-v1.5 embeddings
+- **pdfplumber**: PDF text extraction
+- **pytesseract + Pillow**: OCR for image-based quotes
+- **python-docx**: Word document support
+- **JWT (python-jose + bcrypt)**: Authentication
+- **python-dotenv**: Environment variable management
 
 ### Frontend
-- **React 18** — UI framework
-- **Vite** — Build tool
-- **React Router v6** — Navigation with protected routes
-- **Recharts** — Data visualization
-- **Tailwind CSS** — Styling
-- **Radix UI** — Accessible component primitives
-- **Lucide React** — Icons
+- **React 18**: UI framework
+- **Vite**: Build tool
+- **React Router v6**: Navigation with protected routes
+- **Recharts**: Data visualization
+- **Tailwind CSS**: Styling
+- **Radix UI**: Accessible component primitives
+- **Lucide React**: Icons
 
 ### Infrastructure
-- **Render** — Backend + frontend deployment (single Docker container)
-- **Render PostgreSQL** — Managed PostgreSQL with pgvector
+- **Render**: Backend + frontend deployment (single Docker container)
+- **Render PostgreSQL**: Managed PostgreSQL with pgvector
 
 ---
 
@@ -143,7 +143,7 @@ Live demo: https://procure-ai-byk5.onrender.com
 - Python 3.8+
 - Node.js 16+
 - PostgreSQL 14+ with pgvector extension
-- Groq API Key — free at https://console.groq.com
+- Groq API Key: free at https://console.groq.com
 
 ### Install pgvector (macOS)
 
