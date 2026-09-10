@@ -523,7 +523,26 @@ RULES: (1) Product "name" = short name only (e.g. "Basic wrap goggles", "Hard ha
                     })
                     total_price += float(product_total) if product_total else float(unit_price * quantity)
         
-        # Prefer summed line-item total over LLM summary total (LLM sometimes returns one product's total as doc total)
+        # Try to extract the final stated total from document text using regex
+        # This captures post-discount totals like "Total (USD): $30,130.00" or "Estimated Total: $25,395.00"
+        final_total_patterns = [
+            r'Total\s*\(USD\)\s*[:$]+\s*\$?([\d,]+\.?\d*)',
+            r'Estimated\s+Total[^:]*:\s*\$?([\d,]+\.?\d*)',
+            r'Grand\s+Total[^:]*:\s*\$?([\d,]+\.?\d*)',
+            r'(?:Final|Net)\s+Total[^:]*:\s*\$?([\d,]+\.?\d*)',
+            r'TOTAL[^:]*:\s*\$?([\d,]+\.?\d*)',
+        ]
+        for pattern in final_total_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                try:
+                    candidate = float(match.group(1).replace(',', ''))
+                    if candidate > total_price * 0.5 and candidate < total_price * 1.1:
+                        total_price = candidate
+                        break
+                except Exception:
+                    pass
+
         if summary.get("total_price_range") and total_price <= 0:
             total_price = summary["total_price_range"].get("max", total_price)
         
