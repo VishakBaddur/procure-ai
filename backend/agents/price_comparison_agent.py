@@ -508,6 +508,18 @@ RULES: (1) Product "name" = short name only (e.g. "Basic wrap goggles", "Hard ha
                     payment_term = best_entry.get("payment_terms", "Standard")
                     quantity = (qty_min + (qty_max or qty_min)) / 2 if qty_max else qty_min
                     
+                    # Confidence scoring
+                    has_unit_price = unit_price and unit_price > 0
+                    has_total = product_total and product_total > 0
+                    is_approximate = any(w in (best_entry.get("notes", "") + product.get("description", "")).lower() for w in ["approx", "around", "roughly", "about", "estimate", "ballpark", "~"])
+                    consistent = has_unit_price and has_total and abs(unit_price * quantity - product_total) / max(product_total, 1) < 0.05 if has_unit_price and has_total else False
+                    if consistent and not is_approximate:
+                        confidence = "high"
+                    elif (has_unit_price or has_total) and not is_approximate:
+                        confidence = "medium"
+                    else:
+                        confidence = "low"
+
                     items.append({
                         "name": product_name,
                         "price": float(product_total) if product_total else float(unit_price * quantity),
@@ -519,7 +531,8 @@ RULES: (1) Product "name" = short name only (e.g. "Basic wrap goggles", "Hard ha
                         "payment_terms": payment_term,
                         "quantity_min": qty_min,
                         "quantity_max": qty_max,
-                        "notes": best_entry.get("notes", "")
+                        "notes": best_entry.get("notes", ""),
+                        "confidence": confidence
                     })
                     total_price += float(product_total) if product_total else float(unit_price * quantity)
         

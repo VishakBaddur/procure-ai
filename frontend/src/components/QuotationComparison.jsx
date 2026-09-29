@@ -363,9 +363,22 @@ const QuotationComparison = () => {
                               {products.map((product, idx) => (
                                 <div key={idx} className="border rounded-lg p-4">
                                   <div className="mb-3">
-                                    <h4 className="font-semibold text-base mb-1">
-                                      Product {idx + 1}: {product.name}
-                                    </h4>
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <h4 className="font-semibold text-base">
+                                        Product {idx + 1}: {product.name}
+                                      </h4>
+                                      {product.confidence && (
+                                        <span className={"text-xs px-2 py-0.5 rounded-full font-medium " + (
+                                          product.confidence === "high" ? "bg-green-100 text-green-700" :
+                                          product.confidence === "medium" ? "bg-yellow-100 text-yellow-700" :
+                                          "bg-red-100 text-red-700"
+                                        )}>
+                                          {product.confidence === "high" ? "High confidence" :
+                                           product.confidence === "medium" ? "Review recommended" :
+                                           "Low confidence - verify manually"}
+                                        </span>
+                                      )}
+                                    </div>
                                     {product.description && (
                                       <p className="text-sm text-muted-foreground">{product.description}</p>
                                     )}
