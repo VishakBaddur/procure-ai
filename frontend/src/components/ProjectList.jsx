@@ -89,6 +89,7 @@ const ProjectList = () => {
                 New Project
               </Button>
             </Link>
+            <a href="/audit" className="text-xs text-gray-500 hover:text-gray-800 px-2">Audit Log</a>
             <Button variant="outline" size="icon" onClick={logout} title="Sign out">
               <LogOut className="h-4 w-4" />
             </Button>

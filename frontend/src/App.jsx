@@ -12,6 +12,7 @@ import TCOComparison from "./components/TCOComparison"
 import DecisionAssistance from "./components/DecisionAssistance"
 import WhatIfAnalysis from "./components/WhatIfAnalysis"
 import PrivacyPage from "./components/PrivacyPage"
+import AuditLog from "./components/AuditLog"
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -26,6 +27,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/audit" element={<ProtectedRoute><AuditLog /></ProtectedRoute>} />
       <Route path="/auth" element={user ? <Navigate to="/projects" replace /> : <AuthPage />} />
       <Route path="/" element={<Navigate to={user ? "/projects" : "/auth"} replace />} />
       <Route path="/projects" element={<ProtectedRoute><ProjectList /></ProtectedRoute>} />

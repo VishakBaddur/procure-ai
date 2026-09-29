@@ -17,6 +17,7 @@ from agents.decision_agent import DecisionAgent
 from agents.email_agent import EmailAgent
 
 import os
+from database import log_audit, get_audit_logs
 from database import (
     init_db,
     create_project, get_project, get_all_projects, delete_project,
@@ -136,6 +137,7 @@ def login(body: UserLogin):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
     token = create_access_token({"sub": user["id"]})
+    log_audit(user["id"], "login", resource_type="user", detail=f"Login: {user['email']}")
     return {"access_token": token, "token_type": "bearer", "user": {"id": user["id"], "email": user["email"], "full_name": user["full_name"]}}
 
 
@@ -159,6 +161,15 @@ def semantic_search_endpoint(body: dict, current_user: Optional[str] = Depends(g
     results = semantic_search(project_id, query, top_k)
     return {"results": results}
 
+
+@app.get("/api/audit")
+def get_audit_log(current_user: Optional[str] = Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    user = get_user_by_email(current_user)
+    user_id = user["id"] if user else current_user
+    logs = get_audit_logs(user_id)
+    return {"logs": logs}
 
 # ==================== PROJECT MANAGEMENT ====================
 
@@ -458,6 +469,7 @@ async def add_vendor(project_id: str, background_tasks: BackgroundTasks, vendor_
             background_tasks.add_task(_run_vendor_research_background, vendor_id, vendor_name_clean)
         except Exception:
             pass
+        log_audit(str(project_id), "vendor_added", resource_type="vendor", resource_id=str(vendor_id), detail=f"Vendor added: {vendor_name_clean}")
         return {"success": True, "vendor_id": int(vendor_id), "vendor_name": vendor_name_clean}
     except HTTPException:
         raise
@@ -523,6 +535,7 @@ async def upload_quotation(
             )
         except Exception:
             pass
+        log_audit(str(project_id), "document_uploaded", resource_type="document", resource_id=str(doc_id), detail=f"Quote uploaded for vendor {vendor_name}")
         return {
             "success": True,
             "document_id": int(doc_id) if doc_id is not None else None,

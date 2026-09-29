@@ -437,6 +437,53 @@ def semantic_search(project_id: str, query_embedding: List[float], top_k: int = 
         db.close()
 
 
+class AuditLog(Base):
+    __tablename__ = 'audit_logs'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, nullable=True)
+    action = Column(String, nullable=False)
+    resource_type = Column(String, nullable=True)
+    resource_id = Column(String, nullable=True)
+    detail = Column(Text, nullable=True)
+    ip_address = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+def log_audit(user_id: str, action: str, resource_type: str = None, resource_id: str = None, detail: str = None, ip_address: str = None):
+    db = SessionLocal()
+    try:
+        entry = AuditLog(
+            user_id=user_id,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            detail=detail,
+            ip_address=ip_address
+        )
+        db.add(entry)
+        db.commit()
+    except Exception as e:
+        print(f"Audit log failed: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+def get_audit_logs(user_id: str, limit: int = 50):
+    db = SessionLocal()
+    try:
+        logs = db.query(AuditLog).filter(
+            AuditLog.user_id == user_id
+        ).order_by(AuditLog.created_at.desc()).limit(limit).all()
+        return [{
+            'id': l.id,
+            'action': l.action,
+            'resource_type': l.resource_type,
+            'resource_id': l.resource_id,
+            'detail': l.detail,
+            'created_at': l.created_at.isoformat() if l.created_at else None
+        } for l in logs]
+    finally:
+        db.close()
+
 # ─── Legacy Functions ─────────────────────────────────────────────────────────
 
 def save_procurement_context(context: Dict[str, Any]) -> str:
