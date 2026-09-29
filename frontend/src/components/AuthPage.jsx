@@ -111,6 +111,10 @@ export default function AuthPage() {
             </div>
           </CardContent>
         </Card>
+        <p className="text-xs text-gray-400 mt-4 text-center">
+          By signing in you agree to our{" "}
+          <a href="/privacy" className="text-blue-500 hover:underline">Privacy Policy</a>
+        </p>
       </div>
     </div>
   )

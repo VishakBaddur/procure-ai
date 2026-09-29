@@ -11,6 +11,7 @@ import ReviewsComparison from "./components/ReviewsComparison"
 import TCOComparison from "./components/TCOComparison"
 import DecisionAssistance from "./components/DecisionAssistance"
 import WhatIfAnalysis from "./components/WhatIfAnalysis"
+import PrivacyPage from "./components/PrivacyPage"
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -24,6 +25,7 @@ function AppRoutes() {
   if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading...</div>
   return (
     <Routes>
+      <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/auth" element={user ? <Navigate to="/projects" replace /> : <AuthPage />} />
       <Route path="/" element={<Navigate to={user ? "/projects" : "/auth"} replace />} />
       <Route path="/projects" element={<ProtectedRoute><ProjectList /></ProtectedRoute>} />
