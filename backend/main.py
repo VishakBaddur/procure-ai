@@ -1392,6 +1392,9 @@ if _frontend_dist.exists():
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str):
+        file_path = _frontend_dist / full_path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(str(file_path))
         index = _frontend_dist / "index.html"
         return FileResponse(str(index))
 
