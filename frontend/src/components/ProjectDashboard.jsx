@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { AlertTriangle, CheckCircle2 } from 'lucide-react'
 import ProjectLayout from './ProjectLayout'
 import SemanticSearch from './SemanticSearch'
+import VendorQualification from './VendorQualification'
 
 const ProjectDashboard = () => {
   const { projectId } = useParams()
@@ -200,6 +201,27 @@ const ProjectDashboard = () => {
                     </li>
                   ))}
                 </ul>
+              </CardContent>
+            </Card>
+          )}
+          {/* Supplier Qualification */}
+          {dashboard.vendors && dashboard.vendors.length > 0 && (
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle>Supplier Qualification</CardTitle>
+                <CardDescription>FDA registration, GMP certification, and audit records</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-8">
+                  {dashboard.vendors.map(vendor => (
+                    <VendorQualification
+                      key={vendor.id}
+                      projectId={projectId}
+                      vendorId={vendor.id}
+                      vendorName={vendor.vendor_name}
+                    />
+                  ))}
+                </div>
               </CardContent>
             </Card>
           )}

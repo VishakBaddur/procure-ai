@@ -17,7 +17,7 @@ from agents.decision_agent import DecisionAgent
 from agents.email_agent import EmailAgent
 
 import os
-from database import log_audit, get_audit_logs
+from database import log_audit, get_audit_logs, upsert_vendor_qualification, get_vendor_qualification
 from database import (
     init_db,
     create_project, get_project, get_all_projects, delete_project,
@@ -161,6 +161,17 @@ def semantic_search_endpoint(body: dict, current_user: Optional[str] = Depends(g
     results = semantic_search(project_id, query, top_k)
     return {"results": results}
 
+
+@app.get("/api/projects/{project_id}/vendors/{vendor_id}/qualification")
+def get_qualification(project_id: str, vendor_id: int):
+    qual = get_vendor_qualification(vendor_id)
+    return {"qualification": qual}
+
+@app.post("/api/projects/{project_id}/vendors/{vendor_id}/qualification")
+def save_qualification(project_id: str, vendor_id: int, body: dict):
+    upsert_vendor_qualification(vendor_id, body)
+    log_audit(str(project_id), "qualification_updated", resource_type="vendor", resource_id=str(vendor_id), detail=f"Qualification data updated for vendor {vendor_id}")
+    return {"success": True}
 
 @app.get("/api/audit")
 def get_audit_log(current_user: Optional[str] = Depends(get_current_user)):

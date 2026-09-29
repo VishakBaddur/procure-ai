@@ -437,6 +437,56 @@ def semantic_search(project_id: str, query_embedding: List[float], top_k: int = 
         db.close()
 
 
+class VendorQualification(Base):
+    __tablename__ = 'vendor_qualifications'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    vendor_id = Column(Integer, ForeignKey('vendors.id'), nullable=False, unique=True)
+    fda_registration_number = Column(String, nullable=True)
+    gmp_certified = Column(String, nullable=True)  # 'yes', 'no', 'pending'
+    gmp_certificate_number = Column(String, nullable=True)
+    last_audit_date = Column(String, nullable=True)
+    audit_outcome = Column(String, nullable=True)  # 'passed', 'failed', 'observations'
+    dea_registration = Column(String, nullable=True)
+    iso_certifications = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+def upsert_vendor_qualification(vendor_id: int, data: dict):
+    db = SessionLocal()
+    try:
+        existing = db.query(VendorQualification).filter(VendorQualification.vendor_id == vendor_id).first()
+        if existing:
+            for k, v in data.items():
+                if hasattr(existing, k):
+                    setattr(existing, k, v)
+            existing.updated_at = datetime.utcnow()
+        else:
+            qual = VendorQualification(vendor_id=vendor_id, **{k: v for k, v in data.items() if hasattr(VendorQualification, k)})
+            db.add(qual)
+        db.commit()
+    finally:
+        db.close()
+
+def get_vendor_qualification(vendor_id: int):
+    db = SessionLocal()
+    try:
+        q = db.query(VendorQualification).filter(VendorQualification.vendor_id == vendor_id).first()
+        if not q:
+            return None
+        return {
+            'fda_registration_number': q.fda_registration_number,
+            'gmp_certified': q.gmp_certified,
+            'gmp_certificate_number': q.gmp_certificate_number,
+            'last_audit_date': q.last_audit_date,
+            'audit_outcome': q.audit_outcome,
+            'dea_registration': q.dea_registration,
+            'iso_certifications': q.iso_certifications,
+            'notes': q.notes,
+            'updated_at': q.updated_at.isoformat() if q.updated_at else None
+        }
+    finally:
+        db.close()
+
 class AuditLog(Base):
     __tablename__ = 'audit_logs'
     id = Column(Integer, primary_key=True, autoincrement=True)
