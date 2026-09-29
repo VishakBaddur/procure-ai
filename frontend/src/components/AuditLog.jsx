@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import axios from "axios"
-import { API_BASE_URL } from "../config"
+import { API_BASE } from "../config"
 
 const ACTION_LABELS = {
   login: { label: "Signed in", color: "bg-blue-100 text-blue-700" },
@@ -26,7 +26,7 @@ export default function AuditLog() {
   useEffect(() => {
     const token = localStorage.getItem("token")
     if (!token) { navigate("/auth"); return }
-    axios.get(`${API_BASE_URL}/api/audit`, {
+    axios.get(`${API_BASE}/api/audit`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(res => { setLogs(res.data.logs || []); setLoading(false) })
