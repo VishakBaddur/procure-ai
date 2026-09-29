@@ -1388,6 +1388,13 @@ async def process_email_quote(project_id: str, email_data: Dict[str, Any]):
 
 # Serve frontend static files when running combined (e.g. Docker); frontend_dist is populated by root Dockerfile
 if _frontend_dist.exists():
+    from fastapi.responses import FileResponse
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        index = _frontend_dist / "index.html"
+        return FileResponse(str(index))
+
     app.mount("/", StaticFiles(directory=str(_frontend_dist), html=True), name="frontend")
 
 
